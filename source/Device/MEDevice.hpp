@@ -1,9 +1,20 @@
 #pragma once
 #include <vulkan/vulkan.h>
 #include <vector>
+#include <optional>
 
 namespace MatchEngine
 {
+
+struct QueueFamilyIndices
+{
+    std::optional<uint32_t> graphicsFamily;
+
+    bool IsComplete()
+    {
+        return graphicsFamily.has_value();
+    }
+};
 
 class MEDevice
 {
@@ -13,6 +24,12 @@ public:
 private:
     void InitVulkan();
     void CreateInstance();
+
+    void CreateLogicalDevice();
+
+    void PickPhysicalDevice();
+    bool IsDeviceSuitable(VkPhysicalDevice device);
+    QueueFamilyIndices FindQueueFamilies(VkPhysicalDevice device);
     
     void SetupDebugMessenger();
     void PopulateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo);
@@ -32,6 +49,9 @@ private:
         const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
         void* pUserData);
 
+    VkQueue graphicsQueue;
+    VkDevice device;
+    VkPhysicalDevice physicalDevice;
     VkInstance instance;
     VkDebugUtilsMessengerEXT debugMessenger;
 };

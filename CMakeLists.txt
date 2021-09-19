@@ -4,16 +4,19 @@ project(MatchEngine VERSION 0.1.0)
 include(CTest)
 enable_testing()
 
-file(GLOB PROJ_SRC "*.h" "*.cpp" )
+file(GLOB PROJECT_MAIN "*.hpp" "*.cpp" )
+file(GLOB PROJECT_SOURCE "source/*.*" 
+                         "source/*/*.*" )
 
-link_directories(${PROJECT_NAME} "${CMAKE_CURRENT_SOURCE_DIR}/external/glfw/lib-mingw-w64")
+link_directories(${PROJECT_NAME} "external/glfw/lib-mingw-w64")
 link_directories(${PROJECT_NAME} "C:/VulkanSDK/1.2.162.0/Lib")
 
-include_directories(${PROJECT_NAME} "${CMAKE_CURRENT_SOURCE_DIR}/external/glfw/include/")
-include_directories(${PROJECT_NAME} "C:/VulkanSDK/1.2.162.0/Include")
-include_directories(${PROJECT_NAME} "${CMAKE_CURRENT_SOURCE_DIR}/external/glm/")
+include_directories(${PROJECT_NAME} "source/")
+include_directories(${PROJECT_NAME} "external/glfw/include/")
+include_directories(${PROJECT_NAME} "external/glm/")
+include_directories(${PROJECT_NAME} "C:/VulkanSDK/1.2.162.0/Include/")
 
-add_executable(MatchEngine ${PROJ_SRC})
+add_executable(MatchEngine ${PROJECT_SOURCE} ${PROJECT_MAIN})
 
 set(CPACK_PROJECT_NAME ${PROJECT_NAME})
 set(CPACK_PROJECT_VERSION ${PROJECT_VERSION})

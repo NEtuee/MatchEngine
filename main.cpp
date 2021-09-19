@@ -1,12 +1,22 @@
+#include <App/MEApp.hpp>
+
+#include <cstdlib>
 #include <iostream>
+#include <stdexcept>
 
-#define GLFW_INCLUDE_VULKAN
-#include <GLFW/glfw3.h>
+int main(int, char**) 
+{
+    MatchEngine::MEApp app{};
 
-int main(int, char**) {
-    GLFWwindow* window;
+    try
+    {
+        app.Run();
+    }
+    catch(const std::exception &e) 
+    {
+        std::cerr << e.what() << std::endl;
+        return EXIT_FAILURE;
+    }
 
-    system("pause");
-
-    return 0;
+    return EXIT_SUCCESS;
 }

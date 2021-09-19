@@ -5,6 +5,7 @@
             "includePath": [
                 "${workspaceFolder}/external/glfw/include",
                 "${workspaceFolder}/external/glm",
+                "${workspaceFolder}/source/",
                 "C:/VulkanSDK/1.2.162.0/Include"
                 //"${workspaceFolder}/**"
             ],

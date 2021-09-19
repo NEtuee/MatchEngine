@@ -1,12 +1,10 @@
 #include <iostream>
 
+#define GLFW_INCLUDE_VULKAN
+#include <GLFW/glfw3.h>
+
 int main(int, char**) {
-    std::cout << "Hello, world!\n";
-
-    int i = 0;
-    ++i;
-
-    std::cout << sizeof(void*) << std::endl;
+    GLFWwindow* window;
 
     system("pause");
 

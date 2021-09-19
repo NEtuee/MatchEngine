@@ -1,0 +1,19 @@
+{
+    "configurations": [
+        {
+            "name": "Win32",
+            "includePath": [
+                "${workspaceFolder}/external/glfw/include",
+                "${workspaceFolder}/external/glm",
+                "C:/VulkanSDK/1.2.162.0/Include"
+                //"${workspaceFolder}/**"
+            ],
+            "defines": [
+                "_DEBUG",
+                "UNICODE",
+                "_UNICODE"
+            ],
+        }
+    ],
+    "version": 4
+}

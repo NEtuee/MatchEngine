@@ -1,6 +1,8 @@
 #pragma once
 
 #include <Window/MEWindow.hpp>
+#include <Device/MEDevice.hpp>
+#include <Pipeline/MEPipeline.hpp>
 
 namespace MatchEngine
 {
@@ -14,6 +16,8 @@ public:
     void Run();
 private:
     MEWindow meWindow{WIDTH,HEIGHT,"MyWindow"};
+    MEDevice meDevice{};
+    MEPipeline mePipeline{"../Shaders/Simple.vert.spv","../Shaders/Simple.frag.spv"};
 };
 
 }

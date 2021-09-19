@@ -14,6 +14,9 @@ public:
     MEWindow(int w, int h, std::string name);
     ~MEWindow();
 
+    MEWindow(const MEWindow &) = delete;
+    MEWindow &operator=(const MEWindow &) = delete;
+
     bool ShouldClose() {return glfwWindowShouldClose(window);}
 private:
     void InitWindow();

@@ -1,3 +1,5 @@
+#define _DEBUG
+
 #include <App/MEApp.hpp>
 
 #include <cstdlib>

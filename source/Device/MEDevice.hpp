@@ -9,6 +9,8 @@
 #define GLFW_EXPOSE_NATIVE_WIN32
 #include <GLFW/glfw3native.h>
 
+#include <Window/MEWindow.hpp>
+
 
 namespace MatchEngine
 {
@@ -34,8 +36,10 @@ struct SwapChainSupportDetails
 class MEDevice
 {
 public:
-    MEDevice(GLFWwindow * window);
+    MEDevice(MEWindow & window);
     ~MEDevice();
+
+    VkDevice GetDevice(){return device;}
 private:
     void InitVulkan();
     void CreateInstance();
@@ -74,7 +78,7 @@ private:
         const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
         void* pUserData);
 
-    GLFWwindow * window;
+    MEWindow & window;
 
     std::vector<VkImage> swapChainImages;
     std::vector<VkImageView> swapChainImageViews;

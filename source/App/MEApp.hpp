@@ -15,9 +15,9 @@ public:
 
     void Run();
 private:
-    MEWindow * meWindow;
-    MEDevice * meDevice;
-    //MEPipeline mePipeline{"../Shaders/Simple.vert.spv","../Shaders/Simple.frag.spv"};
+    MEWindow meWindow{WIDTH,HEIGHT,"MyWindow"};
+    MEDevice meDevice{meWindow};
+    MEPipeline mePipeline{meDevice,"../Shaders/Simple.vert.spv","../Shaders/Simple.frag.spv"};
 };
 
 }

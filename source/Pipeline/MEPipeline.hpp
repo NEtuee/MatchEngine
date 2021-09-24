@@ -2,6 +2,7 @@
 
 #include <string>
 #include <vector>
+#include <Device/MEDevice.hpp>
 
 namespace MatchEngine
 {
@@ -9,11 +10,15 @@ namespace MatchEngine
 class MEPipeline
 {
 public:
-    MEPipeline(const std::string& vertPath, const std::string& fragPath);
+    MEPipeline(MEDevice& device, const std::string& vertPath, const std::string& fragPath);
+    ~MEPipeline();
 private:
     static std::vector<char> ReadFile(const std::string & path);
 
     void CreateGraphicsPipeline(const std::string& vertPath, const std::string& fragPath);
+    VkShaderModule CreateShaderModule(const std::vector<char>& code);
+
+    MEDevice& device;
 };
 
 }

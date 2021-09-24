@@ -20,9 +20,9 @@ const std::vector<const char*> deviceExtensions = {
     VK_KHR_SWAPCHAIN_EXTENSION_NAME
 };
 
-MEDevice::MEDevice(GLFWwindow * window)
+MEDevice::MEDevice(MEWindow & window) : window{window}
 {
-    this->window = window;
+    //this->window = window;
     InitVulkan();
 }
 
@@ -106,7 +106,7 @@ void MEDevice::CreateInstance()
 
 void MEDevice::CreateSurface()
 {
-    if(glfwCreateWindowSurface(instance,window,nullptr,&surface) != VK_SUCCESS)
+    if(glfwCreateWindowSurface(instance,window.GetWindowPtr(),nullptr,&surface) != VK_SUCCESS)
     {
         throw std::runtime_error("failed to create window surface");
     }
@@ -234,7 +234,7 @@ VkExtent2D MEDevice::ChooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabiliti
     else
     {
         int width, height;
-        glfwGetFramebufferSize(window, &width, &height);
+        glfwGetFramebufferSize(window.GetWindowPtr(), &width, &height);
         VkExtent2D actualExtent =
         {
             static_cast<uint32_t>(width),

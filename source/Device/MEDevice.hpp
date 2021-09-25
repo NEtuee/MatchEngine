@@ -39,7 +39,9 @@ public:
     MEDevice(MEWindow & window);
     ~MEDevice();
 
-    VkDevice GetDevice(){return device;}
+    const VkDevice& GetDevice(){return device;}
+    const VkExtent2D& GetExtend() {return swapChainExtent;}
+    const VkRenderPass& GetRenderPass() {return renderPass;}
 private:
     void InitVulkan();
     void CreateInstance();
@@ -50,6 +52,8 @@ private:
     bool IsDeviceSuitable(VkPhysicalDevice device);
     bool CheckDeviceExtensionSupport(VkPhysicalDevice device);
     QueueFamilyIndices FindQueueFamilies(VkPhysicalDevice device);
+
+    void CreateRenderPass();
 
     void CreateImageViews();
 
@@ -82,6 +86,8 @@ private:
 
     std::vector<VkImage> swapChainImages;
     std::vector<VkImageView> swapChainImageViews;
+
+    VkRenderPass renderPass;
 
     VkFormat swapChainImageFormat;
     VkExtent2D swapChainExtent;

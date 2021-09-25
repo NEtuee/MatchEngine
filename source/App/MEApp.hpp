@@ -17,7 +17,7 @@ public:
 private:
     MEWindow meWindow{WIDTH,HEIGHT,"MyWindow"};
     MEDevice meDevice{meWindow};
-    MEPipeline mePipeline{meDevice,"../Shaders/Simple.vert.spv","../Shaders/Simple.frag.spv"};
+    MEPipeline mePipeline{meDevice,meWindow,"../Shaders/Simple.vert.spv","../Shaders/Simple.frag.spv"};
 };
 
 }

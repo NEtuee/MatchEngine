@@ -17,6 +17,8 @@ public:
     MEWindow(const MEWindow &) = delete;
     MEWindow &operator=(const MEWindow &) = delete;
 
+    int GetWidth() {return width;}
+    int GetHeight() {return height;}
     bool ShouldClose() {return glfwWindowShouldClose(window);}
     GLFWwindow * GetWindowPtr() {return window;}
 private:

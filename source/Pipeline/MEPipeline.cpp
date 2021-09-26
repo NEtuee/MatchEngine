@@ -12,10 +12,18 @@ MEPipeline::MEPipeline(MEDevice& device, MEWindow& window, const std::string& ve
             : device(device), window(window)
 {
     CreateGraphicsPipeline(vertPath,fragPath);
+    CreateFrameBuffers();
+    CreateCommandPool();
+    CraeteCommandBuffers();
 }
 
 MEPipeline::~MEPipeline()
 {
+    vkDestroyCommandPool(device.GetDevice(),commandPool,nullptr);
+    for(auto framebuffer : swapChainFrameBuffer)
+    {
+        vkDestroyFramebuffer(device.GetDevice(),framebuffer,nullptr);
+    }
     vkDestroyPipeline(device.GetDevice(), graphicsPipeline,nullptr);
     vkDestroyPipelineLayout(device.GetDevice(),pipelineLayout,nullptr);
 }
@@ -38,6 +46,95 @@ std::vector<char> MEPipeline::ReadFile(const std::string & path)
 
     file.close();
     return buffer;
+}
+
+void MEPipeline::CraeteCommandBuffers()
+{
+    commandBuffers.resize(swapChainFrameBuffer.size());
+
+    VkCommandBufferAllocateInfo allocInfo{};
+    allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    allocInfo.commandPool = commandPool;
+    allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    allocInfo.commandBufferCount = (uint32_t)commandBuffers.size();
+
+    if(vkAllocateCommandBuffers(device.GetDevice(),&allocInfo,commandBuffers.data()) != VK_SUCCESS)
+    {
+        throw std::runtime_error("failed to allocate command buffers");
+    }
+
+    for(size_t i = 0; i < commandBuffers.size(); ++i)
+    {
+        VkCommandBufferBeginInfo beginInfo{};
+        beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+        beginInfo.flags = 0;
+        beginInfo.pInheritanceInfo = nullptr;
+
+        if(vkBeginCommandBuffer(commandBuffers[i],&beginInfo) != VK_SUCCESS)
+        {
+            throw std::runtime_error("failed to begin recording command buffer");
+        }
+
+        VkRenderPassBeginInfo renderPassInfo{};
+        renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+        renderPassInfo.renderPass = device.GetRenderPass();
+        renderPassInfo.framebuffer = swapChainFrameBuffer[i];
+
+        renderPassInfo.renderArea.offset = {0,0};
+        renderPassInfo.renderArea.extent = device.GetExtend();
+
+        VkClearValue clearColor = {{{0.0f,0.0f,0.0f,1.0f}}};
+        renderPassInfo.clearValueCount = 1;
+        renderPassInfo.pClearValues = &clearColor;
+
+        vkCmdBeginRenderPass(commandBuffers[i],&renderPassInfo,VK_SUBPASS_CONTENTS_INLINE);
+        vkCmdBindPipeline(commandBuffers[i],VK_PIPELINE_BIND_POINT_GRAPHICS,graphicsPipeline);
+
+    }
+
+    
+}
+
+void MEPipeline::CreateCommandPool()
+{
+    QueueFamilyIndices queueFamilyIndices = device.GetQueueFamiliyIndices();
+    
+    VkCommandPoolCreateInfo poolInfo{};
+    poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+    poolInfo.queueFamilyIndex = queueFamilyIndices.graphicsFamily.value();
+    poolInfo.flags = 0 ;
+
+    if(vkCreateCommandPool(device.GetDevice(),&poolInfo,nullptr,&commandPool) != VK_SUCCESS)
+    {
+        throw std::runtime_error("failed to create command pool");
+    }
+}
+
+void MEPipeline::CreateFrameBuffers()
+{
+    swapChainFrameBuffer.resize(device.GetSwapChainImageViews().size());
+
+    for(size_t i = 0; i < device.GetSwapChainImageViews().size(); ++i)
+    {
+        VkImageView attachments[] = 
+        {
+            device.GetSwapChainImageViews()[i]
+        };
+
+        VkFramebufferCreateInfo framebufferInfo{};
+        framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+        framebufferInfo.renderPass = device.GetRenderPass();
+        framebufferInfo.attachmentCount = 1;
+        framebufferInfo.pAttachments = attachments;
+        framebufferInfo.width = device.GetExtend().width;
+        framebufferInfo.height = device.GetExtend().height;
+        framebufferInfo.layers = 1;
+
+        if(vkCreateFramebuffer(device.GetDevice(),&framebufferInfo,nullptr,&swapChainFrameBuffer[i]) != VK_SUCCESS)
+        {
+            throw std::runtime_error("failed to create framebuffer");
+        }
+    }
 }
 
 void MEPipeline::CreateGraphicsPipeline(const std::string& vertPath, const std::string& fragPath)

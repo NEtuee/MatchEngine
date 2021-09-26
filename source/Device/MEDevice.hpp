@@ -11,7 +11,6 @@
 
 #include <Window/MEWindow.hpp>
 
-
 namespace MatchEngine
 {
 
@@ -42,6 +41,8 @@ public:
     const VkDevice& GetDevice(){return device;}
     const VkExtent2D& GetExtend() {return swapChainExtent;}
     const VkRenderPass& GetRenderPass() {return renderPass;}
+    const std::vector<VkImageView>& GetSwapChainImageViews() {return swapChainImageViews;}
+    const QueueFamilyIndices GetQueueFamiliyIndices() {return FindQueueFamilies(physicalDevice);}
 private:
     void InitVulkan();
     void CreateInstance();

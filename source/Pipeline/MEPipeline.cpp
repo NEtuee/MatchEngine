@@ -15,10 +15,13 @@ MEPipeline::MEPipeline(MEDevice& device, MEWindow& window, const std::string& ve
     CreateFrameBuffers();
     CreateCommandPool();
     CraeteCommandBuffers();
+    CreateSemaphores();
 }
 
 MEPipeline::~MEPipeline()
 {
+    vkDestroySemaphore(device.GetDevice(),renderFinishedSemaphore,nullptr);
+    vkDestroySemaphore(device.GetDevice(),imageAvailableSemaphore,nullptr);
     vkDestroyCommandPool(device.GetDevice(),commandPool,nullptr);
     for(auto framebuffer : swapChainFrameBuffer)
     {
@@ -93,6 +96,58 @@ void MEPipeline::CraeteCommandBuffers()
     }
 
     
+}
+
+void MEPipeline::DrawFrame()
+{
+    uint32_t imageIndex;
+    vkAcquireNextImageKHR(device.GetDevice(), device.GetSwapchain(),UINT64_MAX,imageAvailableSemaphore,VK_NULL_HANDLE, &imageIndex);
+
+    VkSubmitInfo submitInfo{};
+    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+
+    VkSemaphore waitSemaphores[] = {imageAvailableSemaphore};
+    VkPipelineStageFlags waitStages[] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
+    submitInfo.waitSemaphoreCount = 1;
+    submitInfo.pWaitSemaphores = waitSemaphores;
+    submitInfo.pWaitDstStageMask = waitStages;
+    
+    submitInfo.commandBufferCount = 1;
+    submitInfo.pCommandBuffers = &commandBuffers[imageIndex];
+
+    VkSemaphore signalSemaphores[] = {renderFinishedSemaphore};
+    submitInfo.signalSemaphoreCount = 1;
+    submitInfo.pSignalSemaphores = signalSemaphores;
+
+    if(vkQueueSubmit(device.GetGraphicsQueue(),1,&submitInfo,VK_NULL_HANDLE) != VK_SUCCESS)
+    {
+        throw std::runtime_error("failed to submit draw command buffer");
+    }
+
+    VkPresentInfoKHR presentInfo{};
+    presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+    presentInfo.waitSemaphoreCount = 1;
+    presentInfo.pWaitSemaphores = signalSemaphores;
+
+    VkSwapchainKHR swapChains[] = {device.GetSwapchain()};
+    presentInfo.swapchainCount = 1;
+    presentInfo.pSwapchains = swapChains;
+    presentInfo.pImageIndices = &imageIndex;
+    presentInfo.pResults = nullptr;
+
+    vkQueuePresentKHR(device.GetPresentQueue(),&presentInfo);
+}
+
+void MEPipeline::CreateSemaphores()
+{
+    VkSemaphoreCreateInfo semaphoreInfo{};
+    semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+    
+    if(vkCreateSemaphore(device.GetDevice(),&semaphoreInfo,nullptr, &imageAvailableSemaphore) != VK_SUCCESS ||
+        vkCreateSemaphore(device.GetDevice(),&semaphoreInfo,nullptr, &renderFinishedSemaphore) != VK_SUCCESS)
+    {
+        throw std::runtime_error("failed to create semaphores");
+    }
 }
 
 void MEPipeline::CreateCommandPool()

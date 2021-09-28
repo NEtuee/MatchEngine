@@ -41,6 +41,9 @@ public:
     const VkDevice& GetDevice(){return device;}
     const VkExtent2D& GetExtend() {return swapChainExtent;}
     const VkRenderPass& GetRenderPass() {return renderPass;}
+    const VkSwapchainKHR& GetSwapchain() {return swapChain;}
+    const VkQueue& GetGraphicsQueue() {return graphicsQueue;}
+    const VkQueue& GetPresentQueue() {return presentQueue;}
     const std::vector<VkImageView>& GetSwapChainImageViews() {return swapChainImageViews;}
     const QueueFamilyIndices GetQueueFamiliyIndices() {return FindQueueFamilies(physicalDevice);}
 private:
@@ -100,7 +103,6 @@ private:
     VkPhysicalDevice physicalDevice;
     VkInstance instance;
     VkDebugUtilsMessengerEXT debugMessenger;
-
 };
 
 }

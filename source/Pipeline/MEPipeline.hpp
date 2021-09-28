@@ -13,9 +13,12 @@ class MEPipeline
 public:
     MEPipeline(MEDevice& device, MEWindow& window, const std::string& vertPath, const std::string& fragPath);
     ~MEPipeline();
+
+    void DrawFrame();
 private:
     static std::vector<char> ReadFile(const std::string & path);
 
+    void CreateSemaphores();
     void CraeteCommandBuffers();
     void CreateCommandPool();
     void CreateFrameBuffers();
@@ -28,6 +31,9 @@ private:
     VkCommandPool commandPool;
     VkPipeline graphicsPipeline;
     VkPipelineLayout pipelineLayout;
+
+    VkSemaphore imageAvailableSemaphore;
+    VkSemaphore renderFinishedSemaphore;
 
     MEDevice& device;
     MEWindow& window;

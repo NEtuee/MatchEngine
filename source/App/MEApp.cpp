@@ -8,6 +8,7 @@ void MEApp::Run()
     while(!meWindow.ShouldClose())
     {
         glfwPollEvents();
+        mePipeline.DrawFrame();
     }
 }
 

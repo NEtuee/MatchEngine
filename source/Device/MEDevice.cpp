@@ -152,8 +152,6 @@ void MEDevice::CreateSwapChain()
     else
     {
         createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
-        createInfo.queueFamilyIndexCount = 0;
-        createInfo.pQueueFamilyIndices = nullptr;
     }
 
     createInfo.preTransform = swapChainSupport.capabilities.currentTransform;
@@ -205,7 +203,7 @@ VkSurfaceFormatKHR MEDevice::ChooseSwapSurfaceFormat(const std::vector<VkSurface
 {
     for(const auto& availableFormat : availableFormats)
     {
-        if(availableFormat.format == VK_FORMAT_B8G8R8_SRGB && availableFormat.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
+        if(availableFormat.format == VK_FORMAT_B8G8R8A8_SRGB && availableFormat.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
         {
             return availableFormat;
         }
@@ -267,15 +265,7 @@ void MEDevice::CreateLogicalDevice()
         queueCreateInfo.pQueuePriorities = &queuePriority;
         queueCreateInfos.push_back(queueCreateInfo);
     }
-
-    // VkDeviceQueueCreateInfo queueCreateInfo{};
-    // queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-    // queueCreateInfo.queueFamilyIndex = indices.graphicsFamily.value();
-    // queueCreateInfo.queueCount = 1;
-
-    // float queuePriority = 1.0f;
-    // queueCreateInfo.pQueuePriorities = &queuePriority;
-
+    
     VkPhysicalDeviceFeatures deviceFeatures{};
 
     VkDeviceCreateInfo createInfo{};
@@ -304,7 +294,6 @@ void MEDevice::CreateLogicalDevice()
 
 void MEDevice::PickPhysicalDevice()
 {
-    physicalDevice = VK_NULL_HANDLE;
     uint32_t deviceCount = 0;
     vkEnumeratePhysicalDevices(instance, &deviceCount, nullptr);
 
@@ -381,13 +370,13 @@ QueueFamilyIndices MEDevice::FindQueueFamilies(VkPhysicalDevice device)
         if(queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT)
         {
             indices.graphicsFamily = i;
+        }
 
-            VkBool32 presentSupport = false;
-            vkGetPhysicalDeviceSurfaceSupportKHR(device, i ,surface, &presentSupport);
-            if(presentSupport)
-            {
-                indices.presentFamily = i;
-            }
+        VkBool32 presentSupport = false;
+        vkGetPhysicalDeviceSurfaceSupportKHR(device, i ,surface, &presentSupport);
+        if(presentSupport)
+        {
+            indices.presentFamily = i;
         }
 
         if(indices.IsComplete())
@@ -422,13 +411,6 @@ void MEDevice::CreateRenderPass()
     subpass.colorAttachmentCount = 1;
     subpass.pColorAttachments = &colorAttachmentRef;
 
-    VkRenderPassCreateInfo renderPassInfo{};
-    renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-    renderPassInfo.attachmentCount = 1;
-    renderPassInfo.pAttachments = &colorAttachment;
-    renderPassInfo.subpassCount = 1;
-    renderPassInfo.pSubpasses = &subpass;
-
     VkSubpassDependency dependency{};
     dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
     dependency.dstSubpass = 0;
@@ -437,6 +419,12 @@ void MEDevice::CreateRenderPass()
     dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
     dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
     
+    VkRenderPassCreateInfo renderPassInfo{};
+    renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+    renderPassInfo.attachmentCount = 1;
+    renderPassInfo.pAttachments = &colorAttachment;
+    renderPassInfo.subpassCount = 1;
+    renderPassInfo.pSubpasses = &subpass;
     renderPassInfo.dependencyCount = 1;
     renderPassInfo.pDependencies = &dependency;
 

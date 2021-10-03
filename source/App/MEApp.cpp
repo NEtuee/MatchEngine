@@ -10,6 +10,8 @@ void MEApp::Run()
         glfwPollEvents();
         mePipeline.DrawFrame();
     }
+
+    vkDeviceWaitIdle(meDevice.GetDevice());
 }
 
 }

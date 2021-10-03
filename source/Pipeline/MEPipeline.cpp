@@ -4,6 +4,7 @@
 #include <stdexcept>
 #include <iostream>
 #include <vulkan/vulkan.h>
+#include <cstring>
 
 namespace MatchEngine
 {
@@ -15,20 +16,21 @@ MEPipeline::MEPipeline(MEDevice& device, MEWindow& window, const std::string& ve
     CreateFrameBuffers();
     CreateCommandPool();
     CraeteCommandBuffers();
-    CreateSemaphores();
+    CreateSyncObjects();
 }
 
 MEPipeline::~MEPipeline()
 {
-    vkDestroySemaphore(device.GetDevice(),renderFinishedSemaphore,nullptr);
-    vkDestroySemaphore(device.GetDevice(),imageAvailableSemaphore,nullptr);
-    vkDestroyCommandPool(device.GetDevice(),commandPool,nullptr);
-    for(auto framebuffer : swapChainFrameBuffer)
+    CleanupSwapChain();
+    for(size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
     {
-        vkDestroyFramebuffer(device.GetDevice(),framebuffer,nullptr);
+        vkDestroySemaphore(device.GetDevice(),renderFinishedSemaphores[i],nullptr);
+        vkDestroySemaphore(device.GetDevice(),imageAvailableSemaphores[i],nullptr);
+        vkDestroyFence(device.GetDevice(),inFlightFences[i],nullptr);
     }
-    vkDestroyPipeline(device.GetDevice(), graphicsPipeline,nullptr);
-    vkDestroyPipelineLayout(device.GetDevice(),pipelineLayout,nullptr);
+    
+    vkDestroyCommandPool(device.GetDevice(),commandPool,nullptr);
+    
 }
 
 
@@ -103,13 +105,33 @@ void MEPipeline::CraeteCommandBuffers()
 
 void MEPipeline::DrawFrame()
 {
+    vkWaitForFences(device.GetDevice(),1,&inFlightFences[currentFrame],VK_TRUE,UINT64_MAX);
+    vkResetFences(device.GetDevice(),1,&inFlightFences[currentFrame]);
+
     uint32_t imageIndex;
-    vkAcquireNextImageKHR(device.GetDevice(), device.GetSwapchain(),UINT64_MAX,imageAvailableSemaphore,VK_NULL_HANDLE, &imageIndex);
+    auto result = vkAcquireNextImageKHR(device.GetDevice(), device.GetSwapchain(),UINT64_MAX,imageAvailableSemaphores[currentFrame],VK_NULL_HANDLE, &imageIndex);
+
+    if(result == VK_ERROR_OUT_OF_DATE_KHR)
+    {
+        RecreateSwapChain();
+        return;
+    }
+    else if(result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR)
+    {
+        throw std::runtime_error("failed to acquire swap chain image");
+    }
+
+    if(imagesInFlight[imageIndex] != VK_NULL_HANDLE)
+    {
+        vkWaitForFences(device.GetDevice(),1,&imagesInFlight[imageIndex],VK_TRUE,UINT64_MAX);
+    }
+
+    imagesInFlight[imageIndex] = inFlightFences[currentFrame];
 
     VkSubmitInfo submitInfo{};
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 
-    VkSemaphore waitSemaphores[] = {imageAvailableSemaphore};
+    VkSemaphore waitSemaphores[] = {imageAvailableSemaphores[currentFrame]};
     VkPipelineStageFlags waitStages[] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
     submitInfo.waitSemaphoreCount = 1;
     submitInfo.pWaitSemaphores = waitSemaphores;
@@ -118,11 +140,13 @@ void MEPipeline::DrawFrame()
     submitInfo.commandBufferCount = 1;
     submitInfo.pCommandBuffers = &commandBuffers[imageIndex];
 
-    VkSemaphore signalSemaphores[] = {renderFinishedSemaphore};
+    VkSemaphore signalSemaphores[] = {renderFinishedSemaphores[currentFrame]};
     submitInfo.signalSemaphoreCount = 1;
     submitInfo.pSignalSemaphores = signalSemaphores;
 
-    if(vkQueueSubmit(device.GetGraphicsQueue(),1,&submitInfo,VK_NULL_HANDLE) != VK_SUCCESS)
+    vkResetFences(device.GetDevice(),1,&inFlightFences[currentFrame]);
+
+    if(vkQueueSubmit(device.GetGraphicsQueue(),1,&submitInfo,inFlightFences[currentFrame]) != VK_SUCCESS)
     {
         throw std::runtime_error("failed to submit draw command buffer");
     }
@@ -138,19 +162,76 @@ void MEPipeline::DrawFrame()
     presentInfo.pImageIndices = &imageIndex;
     presentInfo.pResults = nullptr;
 
-    vkQueuePresentKHR(device.GetPresentQueue(),&presentInfo);
+    result = vkQueuePresentKHR(device.GetPresentQueue(),&presentInfo);
+
+    if(result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || window.framebufferResized)
+    {
+        window.framebufferResized = false;
+        RecreateSwapChain();
+    }
+    else if(result != VK_SUCCESS)
+    {
+        throw std::runtime_error("failed to present swap chain image");
+    }
+
+    currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
 }
 
-void MEPipeline::CreateSemaphores()
+void MEPipeline::RecreateSwapChain()
 {
+    vkDeviceWaitIdle(device.GetDevice());
+
+    CleanupSwapChain();
+    device.CleanupSwapChain();
+
+    device.RecreateSwapChain();
+    CreateGraphicsPipeline(vertPath,fragPath);
+    CreateFrameBuffers();
+    CraeteCommandBuffers();
+}
+
+void MEPipeline::CleanupSwapChain()
+{
+    // for(auto framebuffer : swapChainFrameBuffer)
+    // {
+    //     vkDestroyFramebuffer(device.GetDevice(),framebuffer,nullptr);
+    // }
+    for(size_t i = 0; i < swapChainFrameBuffer.size(); ++i)
+    {
+        vkDestroyFramebuffer(device.GetDevice(),swapChainFrameBuffer[i],nullptr);
+    }
+
+    vkFreeCommandBuffers(device.GetDevice(),commandPool,static_cast<uint32_t>(commandBuffers.size()),commandBuffers.data());
+
+    vkDestroyPipeline(device.GetDevice(), graphicsPipeline,nullptr);
+    vkDestroyPipelineLayout(device.GetDevice(),pipelineLayout,nullptr);
+}
+
+void MEPipeline::CreateSyncObjects()
+{
+    imageAvailableSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
+    renderFinishedSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
+    inFlightFences.resize(MAX_FRAMES_IN_FLIGHT);
+    imagesInFlight.resize(device.GetSwapChainImages().size(),VK_NULL_HANDLE);
+
     VkSemaphoreCreateInfo semaphoreInfo{};
     semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
     
-    if(vkCreateSemaphore(device.GetDevice(),&semaphoreInfo,nullptr, &imageAvailableSemaphore) != VK_SUCCESS ||
-        vkCreateSemaphore(device.GetDevice(),&semaphoreInfo,nullptr, &renderFinishedSemaphore) != VK_SUCCESS)
+    VkFenceCreateInfo fenceInfo{};
+    fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+    fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+
+    for(size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
     {
-        throw std::runtime_error("failed to create semaphores");
+        if(vkCreateSemaphore(device.GetDevice(),&semaphoreInfo,nullptr, &imageAvailableSemaphores[i]) != VK_SUCCESS ||
+            vkCreateSemaphore(device.GetDevice(),&semaphoreInfo,nullptr, &renderFinishedSemaphores[i]) != VK_SUCCESS ||
+            vkCreateFence(device.GetDevice(),&fenceInfo,nullptr,&inFlightFences[i]) != VK_SUCCESS)
+        {
+            throw std::runtime_error("failed to create sync objects for frame");
+        }
     }
+
+    
 }
 
 void MEPipeline::CreateCommandPool()
@@ -196,6 +277,9 @@ void MEPipeline::CreateFrameBuffers()
 
 void MEPipeline::CreateGraphicsPipeline(const std::string& vertPath, const std::string& fragPath)
 {
+    this->vertPath = vertPath;
+    this->fragPath = fragPath;
+
     auto vert = ReadFile(vertPath);
     auto frag = ReadFile(fragPath);
 

@@ -38,6 +38,9 @@ public:
     MEDevice(MEWindow & window);
     ~MEDevice();
 
+    void RecreateSwapChain();
+    void CleanupSwapChain();
+
     const VkDevice& GetDevice(){return device;}
     const VkExtent2D& GetExtend() {return swapChainExtent;}
     const VkRenderPass& GetRenderPass() {return renderPass;}
@@ -45,6 +48,7 @@ public:
     const VkQueue& GetGraphicsQueue() {return graphicsQueue;}
     const VkQueue& GetPresentQueue() {return presentQueue;}
     const std::vector<VkImageView>& GetSwapChainImageViews() {return swapChainImageViews;}
+    const std::vector<VkImage>& GetSwapChainImages() {return swapChainImages;}
     const QueueFamilyIndices GetQueueFamiliyIndices() {return FindQueueFamilies(physicalDevice);}
 private:
     void InitVulkan();

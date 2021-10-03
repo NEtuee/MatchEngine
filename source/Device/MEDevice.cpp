@@ -28,12 +28,8 @@ MEDevice::MEDevice(MEWindow & window) : window{window}
 
 MEDevice::~MEDevice()
 {
-    vkDestroyRenderPass(device,renderPass,nullptr);
-    for(auto imageView : swapChainImageViews)
-    {
-        vkDestroyImageView(device, imageView, nullptr);
-    }
-    vkDestroySwapchainKHR(device, swapChain, nullptr);
+    CleanupSwapChain();
+
     vkDestroyDevice(device,nullptr);
 #ifdef _DEBUG
     DestroyDebugUtilsMessengerEXT(instance,debugMessenger,nullptr);
@@ -171,6 +167,23 @@ void MEDevice::CreateSwapChain()
 
     swapChainImageFormat = surfaceFormat.format;
     swapChainExtent = extent;
+}
+
+void MEDevice::RecreateSwapChain()
+{
+    CreateSwapChain();
+    CreateImageViews();
+    CreateRenderPass();
+}
+
+void MEDevice::CleanupSwapChain()
+{
+    vkDestroyRenderPass(device,renderPass,nullptr);
+    for(auto imageView : swapChainImageViews)
+    {
+        vkDestroyImageView(device, imageView, nullptr);
+    }
+    vkDestroySwapchainKHR(device, swapChain, nullptr);
 }
 
 SwapChainSupportDetails MEDevice::QuerySwapChainSupport(VkPhysicalDevice device)

@@ -21,12 +21,20 @@ public:
     int GetHeight() {return height;}
     bool ShouldClose() {return glfwWindowShouldClose(window);}
     GLFWwindow * GetWindowPtr() {return window;}
+
+    bool framebufferResized = false;
 private:
     void InitWindow();
     const int width;
     const int height;
     std::string windowName;
     GLFWwindow * window;
+
+    static void FramebufferResizeCallback(GLFWwindow* window,int width, int height)
+    {
+        auto app = reinterpret_cast<MEWindow*>(glfwGetWindowUserPointer(window));
+        app->framebufferResized = true;
+    }
 };
 
 }

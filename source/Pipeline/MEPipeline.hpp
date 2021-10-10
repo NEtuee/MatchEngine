@@ -21,6 +21,8 @@ public:
 private:
     static std::vector<char> ReadFile(const std::string & path);
 
+    void CopyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size);
+    void CreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory);
     void CreateVertexBuffer();
     void CreateSyncObjects();
     void CraeteCommandBuffers();

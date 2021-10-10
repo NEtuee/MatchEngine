@@ -41,6 +41,8 @@ public:
     void RecreateSwapChain();
     void CleanupSwapChain();
 
+    uint32_t FindMemoryType(uint32_t typeFilter,VkMemoryPropertyFlags properties);
+
     const VkDevice& GetDevice(){return device;}
     const VkExtent2D& GetExtend() {return swapChainExtent;}
     const VkRenderPass& GetRenderPass() {return renderPass;}
@@ -62,9 +64,7 @@ private:
     QueueFamilyIndices FindQueueFamilies(VkPhysicalDevice device);
 
     void CreateRenderPass();
-
     void CreateImageViews();
-
     void CreateSurface();
     void CreateSwapChain();
     SwapChainSupportDetails QuerySwapChainSupport(VkPhysicalDevice device);

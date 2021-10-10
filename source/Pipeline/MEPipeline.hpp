@@ -21,12 +21,16 @@ public:
 private:
     static std::vector<char> ReadFile(const std::string & path);
 
+    void CreateVertexBuffer();
     void CreateSyncObjects();
     void CraeteCommandBuffers();
     void CreateCommandPool();
     void CreateFrameBuffers();
     void CreateGraphicsPipeline(const std::string& vertPath, const std::string& fragPath);
     VkShaderModule CreateShaderModule(const std::vector<char>& code);
+
+    VkBuffer vertexBuffer;
+    VkDeviceMemory vertexBufferMemory;
 
     std::string vertPath;
     std::string fragPath;

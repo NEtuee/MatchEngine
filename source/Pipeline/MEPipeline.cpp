@@ -1,4 +1,5 @@
 #include "MEPipeline.hpp"
+#include "Vertex.hpp"
 
 #include <fstream>
 #include <stdexcept>
@@ -15,6 +16,8 @@ MEPipeline::MEPipeline(MEDevice& device, MEWindow& window, const std::string& ve
     CreateGraphicsPipeline(vertPath,fragPath);
     CreateFrameBuffers();
     CreateCommandPool();
+
+    CreateVertexBuffer();
     CraeteCommandBuffers();
     CreateSyncObjects();
 }
@@ -22,6 +25,10 @@ MEPipeline::MEPipeline(MEDevice& device, MEWindow& window, const std::string& ve
 MEPipeline::~MEPipeline()
 {
     CleanupSwapChain();
+
+    vkDestroyBuffer(device.GetDevice(),vertexBuffer,nullptr);
+    vkFreeMemory(device.GetDevice(), vertexBufferMemory,nullptr);
+
     for(size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
     {
         vkDestroySemaphore(device.GetDevice(),renderFinishedSemaphores[i],nullptr);
@@ -92,7 +99,12 @@ void MEPipeline::CraeteCommandBuffers()
 
         vkCmdBeginRenderPass(commandBuffers[i],&renderPassInfo,VK_SUBPASS_CONTENTS_INLINE);
         vkCmdBindPipeline(commandBuffers[i],VK_PIPELINE_BIND_POINT_GRAPHICS,graphicsPipeline);
-        vkCmdDraw(commandBuffers[i],3,1,0,0);
+
+        VkBuffer vertexBuffers[] = {vertexBuffer};
+        VkDeviceSize offsets[] = {0};
+        vkCmdBindVertexBuffers(commandBuffers[i],0,1,vertexBuffers,offsets);
+
+        vkCmdDraw(commandBuffers[i],static_cast<uint32_t>(vertices.size()),1,0,0);
         vkCmdEndRenderPass(commandBuffers[i]);
         if(vkEndCommandBuffer(commandBuffers[i]) != VK_SUCCESS)
         {
@@ -207,6 +219,42 @@ void MEPipeline::CleanupSwapChain()
     vkDestroyPipelineLayout(device.GetDevice(),pipelineLayout,nullptr);
 }
 
+void MEPipeline::CreateVertexBuffer()
+{
+    VkBufferCreateInfo bufferInfo{};
+    bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    bufferInfo.size = sizeof(vertices[0]) * vertices.size();
+    bufferInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+    bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+    if(vkCreateBuffer(device.GetDevice(),&bufferInfo,nullptr,&vertexBuffer) != VK_SUCCESS)
+    {
+        throw std::runtime_error("failed to create vertex buffer");
+    }
+
+    VkMemoryRequirements memRequirments;
+    vkGetBufferMemoryRequirements(device.GetDevice(),vertexBuffer,&memRequirments);
+
+    VkMemoryAllocateInfo allocInfo{};
+    allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    allocInfo.allocationSize = memRequirments.size;
+    allocInfo.memoryTypeIndex = device.FindMemoryType(memRequirments.memoryTypeBits,
+                                                    VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+    
+    if(vkAllocateMemory(device.GetDevice(),&allocInfo,nullptr,&vertexBufferMemory) != VK_SUCCESS)
+    {
+        throw std::runtime_error("failed to allocate vertex buffer memory");
+    }
+
+    vkBindBufferMemory(device.GetDevice(),vertexBuffer,vertexBufferMemory,0);
+
+    void* data;
+    vkMapMemory(device.GetDevice(),vertexBufferMemory,0,bufferInfo.size,0,&data);
+    memcpy(data,vertices.data(),(size_t)bufferInfo.size);
+    vkUnmapMemory(device.GetDevice(),vertexBufferMemory);
+
+}
+
 void MEPipeline::CreateSyncObjects()
 {
     imageAvailableSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
@@ -305,6 +353,15 @@ void MEPipeline::CreateGraphicsPipeline(const std::string& vertPath, const std::
     vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
     vertexInputInfo.vertexBindingDescriptionCount = 0;
     vertexInputInfo.vertexAttributeDescriptionCount = 0;
+
+    auto bindingDesc = Vertex::GetBindingDescription();
+    auto attributeDesc = Vertex::GetAttributeDescriptions();
+
+    vertexInputInfo.vertexBindingDescriptionCount = 1;
+    vertexInputInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(attributeDesc.size());
+    vertexInputInfo.pVertexBindingDescriptions = &bindingDesc;
+    vertexInputInfo.pVertexAttributeDescriptions = attributeDesc.data();
+
 
     VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
     inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;

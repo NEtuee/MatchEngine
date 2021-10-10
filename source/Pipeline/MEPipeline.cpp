@@ -1,5 +1,6 @@
 #include "MEPipeline.hpp"
 #include "Vertex.hpp"
+#include "UniformBufferObject.hpp"
 
 #include <fstream>
 #include <stdexcept>
@@ -7,17 +8,28 @@
 #include <vulkan/vulkan.h>
 #include <cstring>
 
+#define GLM_FORCE_RADIANS
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <chrono>
+
 namespace MatchEngine
 {
 
 MEPipeline::MEPipeline(MEDevice& device, MEWindow& window, const std::string& vertPath, const std::string& fragPath)
             : device(device), window(window)
 {
+    CreateDescriptorSetLayout();
     CreateGraphicsPipeline(vertPath,fragPath);
     CreateFrameBuffers();
     CreateCommandPool();
 
     CreateVertexBuffer();
+    CreateIndexBuffer();
+    CreateUniformBuffers();
+    CreateDescriptorPool();
+    CreateDescriptorSets();
+
     CraeteCommandBuffers();
     CreateSyncObjects();
 }
@@ -26,8 +38,13 @@ MEPipeline::~MEPipeline()
 {
     CleanupSwapChain();
 
+    vkDestroyDescriptorSetLayout(device.GetDevice(),descSetLayout,nullptr);
+
     vkDestroyBuffer(device.GetDevice(),vertexBuffer,nullptr);
     vkFreeMemory(device.GetDevice(), vertexBufferMemory,nullptr);
+
+    vkDestroyBuffer(device.GetDevice(),indexBuffer,nullptr);
+    vkFreeMemory(device.GetDevice(), indexBufferMemory,nullptr);
 
     for(size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
     {
@@ -103,8 +120,11 @@ void MEPipeline::CraeteCommandBuffers()
         VkBuffer vertexBuffers[] = {vertexBuffer};
         VkDeviceSize offsets[] = {0};
         vkCmdBindVertexBuffers(commandBuffers[i],0,1,vertexBuffers,offsets);
+        vkCmdBindIndexBuffer(commandBuffers[i],indexBuffer,0,VK_INDEX_TYPE_UINT16);
 
-        vkCmdDraw(commandBuffers[i],static_cast<uint32_t>(vertices.size()),1,0,0);
+        //vkCmdDraw(commandBuffers[i],static_cast<uint32_t>(vertices.size()),1,0,0);
+        vkCmdBindDescriptorSets(commandBuffers[i],VK_PIPELINE_BIND_POINT_GRAPHICS,pipelineLayout,0,1,&descriptorSets[i],0,nullptr);
+        vkCmdDrawIndexed(commandBuffers[i], static_cast<uint32_t>(indices.size()),1,0,0,0);
         vkCmdEndRenderPass(commandBuffers[i]);
         if(vkEndCommandBuffer(commandBuffers[i]) != VK_SUCCESS)
         {
@@ -139,6 +159,8 @@ void MEPipeline::DrawFrame()
     }
 
     imagesInFlight[imageIndex] = inFlightFences[currentFrame];
+
+    UpdateUniformBuffer(imageIndex);
 
     VkSubmitInfo submitInfo{};
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -189,6 +211,26 @@ void MEPipeline::DrawFrame()
     currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
 }
 
+void MEPipeline::UpdateUniformBuffer(uint32_t currentImage)
+{
+    static auto startTime = std::chrono::high_resolution_clock::now();
+    auto currentTime = std::chrono::high_resolution_clock::now();
+
+    float time = std::chrono::duration<float,std::chrono::seconds::period>(currentTime - startTime).count();
+
+    UniformBufferObject ubo{};
+    auto extend = device.GetExtend();
+    ubo.model = glm::rotate(glm::mat4(1.0f),time * glm::radians(90.0f),glm::vec3(.0f,.0f,1.0f));
+    ubo.view = glm::lookAt(glm::vec3(2.0f,2.0f,2.0f),glm::vec3(0.f,0.f,0.f),glm::vec3(0.f,0.f,1.0f));
+    ubo.proj = glm::perspective(glm::radians(45.0f),extend.width / (float)extend.height,0.1f,10.f);
+    ubo.proj[1][1] *= -1;
+
+    void* data;
+    vkMapMemory(device.GetDevice(), uniformBuffersMemory[currentImage],0,sizeof(ubo),0,&data);
+    memcpy(data,&ubo,sizeof(ubo));
+    vkUnmapMemory(device.GetDevice(), uniformBuffersMemory[currentImage]);
+}
+
 void MEPipeline::RecreateSwapChain()
 {
     vkDeviceWaitIdle(device.GetDevice());
@@ -198,7 +240,11 @@ void MEPipeline::RecreateSwapChain()
 
     device.RecreateSwapChain();
     CreateGraphicsPipeline(vertPath,fragPath);
+
     CreateFrameBuffers();
+    CreateUniformBuffers();
+    CreateDescriptorPool();
+    CreateDescriptorSets();
     CraeteCommandBuffers();
 }
 
@@ -217,6 +263,96 @@ void MEPipeline::CleanupSwapChain()
 
     vkDestroyPipeline(device.GetDevice(), graphicsPipeline,nullptr);
     vkDestroyPipelineLayout(device.GetDevice(),pipelineLayout,nullptr);
+
+    for(size_t i = 0; i < device.GetSwapChainImages().size(); ++i)
+    {
+        vkDestroyBuffer(device.GetDevice(),uniformBuffers[i],nullptr);
+        vkFreeMemory(device.GetDevice(),uniformBuffersMemory[i],nullptr);
+    }
+
+    vkDestroyDescriptorPool(device.GetDevice(),descriptorPool, nullptr);
+}
+
+void MEPipeline::CreateDescriptorSets()
+{
+    std::vector<VkDescriptorSetLayout> layouts(device.GetSwapChainImages().size(),descSetLayout);
+    VkDescriptorSetAllocateInfo allocInfo{};
+    allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    allocInfo.descriptorPool = descriptorPool;
+    allocInfo.descriptorSetCount = static_cast<uint32_t>(device.GetSwapChainImages().size());
+    allocInfo.pSetLayouts = layouts.data();
+
+    descriptorSets.resize(device.GetSwapChainImages().size());
+    if(vkAllocateDescriptorSets(device.GetDevice(),&allocInfo,descriptorSets.data()) != VK_SUCCESS)
+    {
+        throw std::runtime_error("failed to allocate descriptor sets");
+    }
+
+    for(size_t i = 0; i < device.GetSwapChainImages().size(); ++i)
+    {
+        VkDescriptorBufferInfo bufferInfo{};
+        bufferInfo.buffer = uniformBuffers[i];
+        bufferInfo.offset = 0;
+        bufferInfo.range = sizeof(UniformBufferObject);
+
+        VkWriteDescriptorSet descriptorWrite{};
+        descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptorWrite.dstSet = descriptorSets[i];
+        descriptorWrite.dstBinding = 0;
+        descriptorWrite.dstArrayElement = 0;
+
+        descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        descriptorWrite.descriptorCount = 1;
+        descriptorWrite.pBufferInfo = &bufferInfo;
+        descriptorWrite.pImageInfo = nullptr;
+        descriptorWrite.pTexelBufferView = nullptr;
+
+        vkUpdateDescriptorSets(device.GetDevice(),1,&descriptorWrite,0,nullptr);
+    }
+}
+
+void MEPipeline::CreateDescriptorPool()
+{
+    VkDescriptorPoolSize poolSize{};
+    poolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    poolSize.descriptorCount = static_cast<uint32_t>(device.GetSwapChainImages().size());
+    
+    VkDescriptorPoolCreateInfo poolInfo{};
+    poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    poolInfo.poolSizeCount = 1;
+    poolInfo.pPoolSizes = &poolSize;
+    poolInfo.maxSets = static_cast<uint32_t>(device.GetSwapChainImages().size());
+
+    if(vkCreateDescriptorPool(device.GetDevice(),&poolInfo,nullptr,&descriptorPool) != VK_SUCCESS)
+    {
+        throw std::runtime_error("failed to create descriptor pool");
+    }
+}
+
+void MEPipeline::CreateDescriptorSetLayout()
+{
+    VkDescriptorSetLayoutBinding uboLayoutBinding{};
+    uboLayoutBinding.binding = 0;
+    uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    uboLayoutBinding.descriptorCount = 1;
+    uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    uboLayoutBinding.pImmutableSamplers = nullptr;
+
+    VkDescriptorSetLayoutCreateInfo layoutInfo{};
+    layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    layoutInfo.bindingCount = 1;
+    layoutInfo.pBindings = &uboLayoutBinding;
+
+    if(vkCreateDescriptorSetLayout(device.GetDevice(),&layoutInfo, nullptr,&descSetLayout) != VK_SUCCESS)
+    {
+        throw std::runtime_error("failed to create descriptor set layout");
+    }
+
+    VkPipelineLayoutCreateInfo pipelineCreateInfo{};
+    pipelineCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    pipelineCreateInfo.setLayoutCount = 1;
+    pipelineCreateInfo.pSetLayouts = &descSetLayout;
+
 }
 
 void MEPipeline::CopyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size)
@@ -282,6 +418,44 @@ void MEPipeline::CreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMem
     }
 
     vkBindBufferMemory(device.GetDevice(),buffer,bufferMemory,0);
+}
+
+void MEPipeline::CreateUniformBuffers()
+{
+    VkDeviceSize bufferSize = sizeof(UniformBufferObject);
+
+    uniformBuffers.resize(device.GetSwapChainImages().size());
+    uniformBuffersMemory.resize(device.GetSwapChainImages().size());
+
+    for(size_t i = 0; i < device.GetSwapChainImages().size(); ++i)
+    {
+        CreateBuffer(bufferSize,VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | 
+                                                            VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, uniformBuffers[i],uniformBuffersMemory[i]);
+
+    }
+}
+
+void MEPipeline::CreateIndexBuffer()
+{
+    VkDeviceSize bufferSize = sizeof(indices[0]) * indices.size();
+
+    VkBuffer stagingBuffer;
+    VkDeviceMemory stagingBufferMemory;
+    CreateBuffer(bufferSize,VK_BUFFER_USAGE_TRANSFER_SRC_BIT,VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+                            VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
+
+    void* data;
+    vkMapMemory(device.GetDevice(),stagingBufferMemory,0,bufferSize,0,&data);
+    memcpy(data,indices.data(),(size_t)bufferSize);
+    vkUnmapMemory(device.GetDevice(),stagingBufferMemory);
+
+    CreateBuffer(bufferSize,VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+                            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, indexBuffer,indexBufferMemory);
+
+    CopyBuffer(stagingBuffer,indexBuffer,bufferSize);
+
+    vkDestroyBuffer(device.GetDevice(),stagingBuffer,nullptr);
+    vkFreeMemory(device.GetDevice(),stagingBufferMemory,nullptr);
 }
 
 void MEPipeline::CreateVertexBuffer()
@@ -446,7 +620,7 @@ void MEPipeline::CreateGraphicsPipeline(const std::string& vertPath, const std::
     rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
     rasterizer.lineWidth = 1.0f;
     rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
-    rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE;
+    rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
     rasterizer.depthBiasEnable = VK_FALSE;
 
     VkPipelineMultisampleStateCreateInfo multisampling{};
@@ -477,7 +651,8 @@ void MEPipeline::CreateGraphicsPipeline(const std::string& vertPath, const std::
 
     VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
     pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    pipelineLayoutInfo.setLayoutCount = 0;
+    pipelineLayoutInfo.setLayoutCount = 1;
+    pipelineLayoutInfo.pSetLayouts = &descSetLayout;
     pipelineLayoutInfo.pushConstantRangeCount = 0;
 
     if (vkCreatePipelineLayout(device.GetDevice(), &pipelineLayoutInfo, nullptr, &pipelineLayout) != VK_SUCCESS) {

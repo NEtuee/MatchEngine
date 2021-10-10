@@ -16,13 +16,19 @@ public:
     ~MEPipeline();
 
     void DrawFrame();
+    void UpdateUniformBuffer(uint32_t currentImage);
     void RecreateSwapChain();
     void CleanupSwapChain();
 private:
     static std::vector<char> ReadFile(const std::string & path);
 
+    void CreateDescriptorSets();
+    void CreateDescriptorPool();
+    void CreateDescriptorSetLayout();
     void CopyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size);
     void CreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory);
+    void CreateUniformBuffers();
+    void CreateIndexBuffer();
     void CreateVertexBuffer();
     void CreateSyncObjects();
     void CraeteCommandBuffers();
@@ -31,8 +37,18 @@ private:
     void CreateGraphicsPipeline(const std::string& vertPath, const std::string& fragPath);
     VkShaderModule CreateShaderModule(const std::vector<char>& code);
 
+    VkDescriptorPool descriptorPool;
+    std::vector<VkDescriptorSet> descriptorSets;
+
+    VkDescriptorSetLayout descSetLayout;
+
     VkBuffer vertexBuffer;
     VkDeviceMemory vertexBufferMemory;
+    VkBuffer indexBuffer;
+    VkDeviceMemory indexBufferMemory;
+
+    std::vector<VkBuffer> uniformBuffers;
+    std::vector<VkDeviceMemory> uniformBuffersMemory;
 
     std::string vertPath;
     std::string fragPath;

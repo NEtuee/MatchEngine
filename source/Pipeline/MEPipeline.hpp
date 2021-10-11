@@ -22,12 +22,22 @@ public:
 private:
     static std::vector<char> ReadFile(const std::string & path);
 
+    void CopyBufferToImage(VkBuffer buffer,VkImage image, uint32_t width, uint32_t height);
+    void TransitionImageLayout(VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout);
+    void CreateImage(uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage& image, VkDeviceMemory& imageMemory);
     void CreateTextureImage();
 
     void CreateDescriptorSets();
     void CreateDescriptorPool();
     void CreateDescriptorSetLayout();
+
+    void CreateTextureSampler();
+    VkImageView CreateImageView(VkImage image, VkFormat format);
+    void CreateTextureImageView();
+    VkCommandBuffer BeginSingleTimeCommands();
+    void EndSingleTimeCommands(VkCommandBuffer commandBuffer);
     void CopyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size);
+
     void CreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory);
     void CreateUniformBuffers();
     void CreateIndexBuffer();
@@ -38,6 +48,11 @@ private:
     void CreateFrameBuffers();
     void CreateGraphicsPipeline(const std::string& vertPath, const std::string& fragPath);
     VkShaderModule CreateShaderModule(const std::vector<char>& code);
+
+    VkImageView textureImageView;
+    VkSampler textureSampler;
+    VkImage textureImage;
+    VkDeviceMemory textureImageMemory;
 
     VkDescriptorPool descriptorPool;
     std::vector<VkDescriptorSet> descriptorSets;

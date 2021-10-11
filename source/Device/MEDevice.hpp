@@ -43,6 +43,7 @@ public:
 
     uint32_t FindMemoryType(uint32_t typeFilter,VkMemoryPropertyFlags properties);
 
+    const VkPhysicalDevice& GetPhysicalDevice() {return physicalDevice;}
     const VkDevice& GetDevice(){return device;}
     const VkExtent2D& GetExtend() {return swapChainExtent;}
     const VkRenderPass& GetRenderPass() {return renderPass;}

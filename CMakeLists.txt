@@ -16,6 +16,7 @@ link_directories(${PROJECT_NAME} "C:/VulkanSDK/1.2.162.0/Lib")
 include_directories(${PROJECT_NAME} "source/")
 include_directories(${PROJECT_NAME} "external/glfw/include/")
 include_directories(${PROJECT_NAME} "external/glm/")
+include_directories(${PROJECT_NAME} "external/stb-master/")
 include_directories(${PROJECT_NAME} "C:/VulkanSDK/1.2.162.0/Include/")
 
 add_executable(MatchEngine ${PROJECT_SOURCE} ${PROJECT_MAIN})

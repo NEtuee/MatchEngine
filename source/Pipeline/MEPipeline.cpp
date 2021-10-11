@@ -13,6 +13,9 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <chrono>
 
+#define STB_IMAGE_IMPLEMENTAION
+#include <stb_image.h>
+
 namespace MatchEngine
 {
 
@@ -22,6 +25,7 @@ MEPipeline::MEPipeline(MEDevice& device, MEWindow& window, const std::string& ve
     CreateDescriptorSetLayout();
     CreateGraphicsPipeline(vertPath,fragPath);
     CreateFrameBuffers();
+    CreateTextureImage();
     CreateCommandPool();
 
     CreateVertexBuffer();
@@ -271,6 +275,11 @@ void MEPipeline::CleanupSwapChain()
     }
 
     vkDestroyDescriptorPool(device.GetDevice(),descriptorPool, nullptr);
+}
+
+void MEPipeline::CreateTextureImage()
+{
+
 }
 
 void MEPipeline::CreateDescriptorSets()

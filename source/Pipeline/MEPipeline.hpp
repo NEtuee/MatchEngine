@@ -22,6 +22,8 @@ public:
 private:
     static std::vector<char> ReadFile(const std::string & path);
 
+    void CreateTextureImage();
+
     void CreateDescriptorSets();
     void CreateDescriptorPool();
     void CreateDescriptorSetLayout();

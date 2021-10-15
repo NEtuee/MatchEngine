@@ -9,6 +9,7 @@
 #include <cstring>
 
 #define GLM_FORCE_RADIANS
+#define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <chrono>
@@ -25,8 +26,9 @@ MEPipeline::MEPipeline(MEDevice& device, MEWindow& window, const std::string& ve
 {
     CreateDescriptorSetLayout();
     CreateGraphicsPipeline(vertPath,fragPath);
-    CreateFrameBuffers();
     CreateCommandPool();
+    CreateDepthResources();
+    CreateFrameBuffers();
     CreateTextureImage();
     CreateTextureImageView();
     CreateTextureSampler();
@@ -123,9 +125,13 @@ void MEPipeline::CraeteCommandBuffers()
         renderPassInfo.renderArea.offset = {0,0};
         renderPassInfo.renderArea.extent = device.GetExtend();
 
-        VkClearValue clearColor = {{{0.0f,0.0f,0.0f,1.0f}}};
-        renderPassInfo.clearValueCount = 1;
-        renderPassInfo.pClearValues = &clearColor;
+        std::array<VkClearValue,2> clearValues{};
+        //VkClearValue clearColor = {{{0.0f,0.0f,0.0f,1.0f}}};
+        clearValues[0].color = {{0.0f,0.0f,0.0f,1.0f}};
+        clearValues[1].depthStencil = {1.0f, 0};
+
+        renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
+        renderPassInfo.pClearValues = clearValues.data();
 
         vkCmdBeginRenderPass(commandBuffers[i],&renderPassInfo,VK_SUBPASS_CONTENTS_INLINE);
         vkCmdBindPipeline(commandBuffers[i],VK_PIPELINE_BIND_POINT_GRAPHICS,graphicsPipeline);
@@ -151,7 +157,7 @@ void MEPipeline::CraeteCommandBuffers()
 void MEPipeline::DrawFrame()
 {
     vkWaitForFences(device.GetDevice(),1,&inFlightFences[currentFrame],VK_TRUE,UINT64_MAX);
-    vkResetFences(device.GetDevice(),1,&inFlightFences[currentFrame]);
+    //vkResetFences(device.GetDevice(),1,&inFlightFences[currentFrame]);
 
     uint32_t imageIndex;
     auto result = vkAcquireNextImageKHR(device.GetDevice(), device.GetSwapchain(),UINT64_MAX,imageAvailableSemaphores[currentFrame],VK_NULL_HANDLE, &imageIndex);
@@ -246,6 +252,14 @@ void MEPipeline::UpdateUniformBuffer(uint32_t currentImage)
 
 void MEPipeline::RecreateSwapChain()
 {
+    int width = 0, height = 0;
+    glfwGetFramebufferSize(window.GetWindowPtr(),&width,&height);
+    while(width == 0 || height == 0)
+    {
+        glfwGetFramebufferSize(window.GetWindowPtr(),&width,&height);
+        glfwWaitEvents();
+    }
+
     vkDeviceWaitIdle(device.GetDevice());
 
     CleanupSwapChain();
@@ -254,11 +268,14 @@ void MEPipeline::RecreateSwapChain()
     device.RecreateSwapChain();
     CreateGraphicsPipeline(vertPath,fragPath);
 
+    CreateDepthResources();
     CreateFrameBuffers();
     CreateUniformBuffers();
     CreateDescriptorPool();
     CreateDescriptorSets();
     CraeteCommandBuffers();
+
+    imagesInFlight.resize(device.GetSwapChainImages().size(),VK_NULL_HANDLE);
 }
 
 void MEPipeline::CleanupSwapChain()
@@ -267,6 +284,10 @@ void MEPipeline::CleanupSwapChain()
     // {
     //     vkDestroyFramebuffer(device.GetDevice(),framebuffer,nullptr);
     // }
+    vkDestroyImageView(device.GetDevice(),depthImageView,nullptr);
+    vkDestroyImage(device.GetDevice(),depthImage,nullptr);
+    vkFreeMemory(device.GetDevice(),depthImageMemory,nullptr);
+
     for(size_t i = 0; i < swapChainFrameBuffer.size(); ++i)
     {
         vkDestroyFramebuffer(device.GetDevice(),swapChainFrameBuffer[i],nullptr);
@@ -340,6 +361,19 @@ void MEPipeline::TransitionImageLayout(VkImage image, VkFormat format, VkImageLa
     VkPipelineStageFlags sourceStage;
     VkPipelineStageFlags destinationStage;
 
+    if(newLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
+    {
+        barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+        if(device.HasStencilComponent(format))
+        {
+            barrier.subresourceRange.aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT;
+        }
+    }
+    else
+    {
+        barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    }
+
     if(oldLayout == VK_IMAGE_LAYOUT_UNDEFINED && newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)
     {
         barrier.srcAccessMask = 0;
@@ -355,6 +389,14 @@ void MEPipeline::TransitionImageLayout(VkImage image, VkFormat format, VkImageLa
 
         sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
         destinationStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+    }
+    else if(oldLayout == VK_IMAGE_LAYOUT_UNDEFINED && newLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
+    {
+        barrier.srcAccessMask = 0;
+        barrier.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+
+        sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+        destinationStage = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
     }
     else
     {
@@ -442,14 +484,14 @@ void MEPipeline::CreateTextureSampler()
     }
 }
 
-VkImageView MEPipeline::CreateImageView(VkImage image, VkFormat format)
+VkImageView MEPipeline::CreateImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags)
 {
     VkImageViewCreateInfo viewInfo{};
     viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
     viewInfo.image = image;
     viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
     viewInfo.format = format;
-    viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    viewInfo.subresourceRange.aspectMask = aspectFlags;
     viewInfo.subresourceRange.baseMipLevel = 0;
     viewInfo.subresourceRange.levelCount = 1;
     viewInfo.subresourceRange.baseArrayLayer = 0;
@@ -466,7 +508,7 @@ VkImageView MEPipeline::CreateImageView(VkImage image, VkFormat format)
 
 void MEPipeline::CreateTextureImageView()
 {
-    textureImageView = CreateImageView(textureImage,VK_FORMAT_R8G8B8A8_SRGB);
+    textureImageView = CreateImageView(textureImage,VK_FORMAT_R8G8B8A8_SRGB,VK_IMAGE_ASPECT_COLOR_BIT);
 }
 
 void MEPipeline::CreateTextureImage()
@@ -664,6 +706,17 @@ void MEPipeline::CopyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize
     EndSingleTimeCommands(commandBuffer);
 }
 
+void MEPipeline::CreateDepthResources()
+{
+    VkFormat depthFormat = device.FindDepthFormat();
+    CreateImage(device.GetExtend().width,device.GetExtend().height,depthFormat,VK_IMAGE_TILING_OPTIMAL,
+                VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, depthImage, depthImageMemory);
+    
+    depthImageView = CreateImageView(depthImage,depthFormat,VK_IMAGE_ASPECT_DEPTH_BIT);
+
+    TransitionImageLayout(depthImage,depthFormat,VK_IMAGE_LAYOUT_UNDEFINED,VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+}
+
 void MEPipeline::CreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory)
 {
     VkBufferCreateInfo bufferInfo{};
@@ -801,16 +854,17 @@ void MEPipeline::CreateFrameBuffers()
 
     for(size_t i = 0; i < device.GetSwapChainImageViews().size(); ++i)
     {
-        VkImageView attachments[] = 
+        std::array<VkImageView,2> attachments = 
         {
-            device.GetSwapChainImageViews()[i]
+            device.GetSwapChainImageViews()[i],
+            depthImageView
         };
 
         VkFramebufferCreateInfo framebufferInfo{};
         framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
         framebufferInfo.renderPass = device.GetRenderPass();
-        framebufferInfo.attachmentCount = 1;
-        framebufferInfo.pAttachments = attachments;
+        framebufferInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
+        framebufferInfo.pAttachments = attachments.data();
         framebufferInfo.width = device.GetExtend().width;
         framebufferInfo.height = device.GetExtend().height;
         framebufferInfo.layers = 1;
@@ -919,6 +973,14 @@ void MEPipeline::CreateGraphicsPipeline(const std::string& vertPath, const std::
     colorBlending.blendConstants[2] = 0.0f; // Optional
     colorBlending.blendConstants[3] = 0.0f; // Optional
 
+    VkPipelineDepthStencilStateCreateInfo depthStencil{};
+    depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+    depthStencil.depthTestEnable = VK_TRUE;
+    depthStencil.depthWriteEnable = VK_TRUE;
+    depthStencil.depthCompareOp = VK_COMPARE_OP_LESS;
+    depthStencil.depthBoundsTestEnable = VK_FALSE;
+    depthStencil.stencilTestEnable = VK_FALSE;
+
     VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
     pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     pipelineLayoutInfo.setLayoutCount = 1;
@@ -939,6 +1001,7 @@ void MEPipeline::CreateGraphicsPipeline(const std::string& vertPath, const std::
     pipelineInfo.pRasterizationState = &rasterizer;
     pipelineInfo.pMultisampleState = &multisampling;
     pipelineInfo.pColorBlendState = &colorBlending;
+    pipelineInfo.pDepthStencilState = &depthStencil;
     
     pipelineInfo.layout = pipelineLayout;
     pipelineInfo.renderPass = device.GetRenderPass();

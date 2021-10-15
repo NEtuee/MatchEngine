@@ -32,11 +32,13 @@ private:
     void CreateDescriptorSetLayout();
 
     void CreateTextureSampler();
-    VkImageView CreateImageView(VkImage image, VkFormat format);
+    VkImageView CreateImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags);
     void CreateTextureImageView();
     VkCommandBuffer BeginSingleTimeCommands();
     void EndSingleTimeCommands(VkCommandBuffer commandBuffer);
     void CopyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size);
+
+    void CreateDepthResources();
 
     void CreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory);
     void CreateUniformBuffers();
@@ -48,6 +50,10 @@ private:
     void CreateFrameBuffers();
     void CreateGraphicsPipeline(const std::string& vertPath, const std::string& fragPath);
     VkShaderModule CreateShaderModule(const std::vector<char>& code);
+
+    VkImage depthImage;
+    VkDeviceMemory depthImageMemory;
+    VkImageView depthImageView;
 
     VkImageView textureImageView;
     VkSampler textureSampler;

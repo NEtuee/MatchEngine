@@ -41,7 +41,10 @@ public:
     void RecreateSwapChain();
     void CleanupSwapChain();
 
+    bool HasStencilComponent(VkFormat format);
     uint32_t FindMemoryType(uint32_t typeFilter,VkMemoryPropertyFlags properties);
+    VkFormat FindDepthFormat();
+    VkFormat FindSupportedFormat(const std::vector<VkFormat>& candidates,VkImageTiling tiling,VkFormatFeatureFlags features);
 
     const VkPhysicalDevice& GetPhysicalDevice() {return physicalDevice;}
     const VkDevice& GetDevice(){return device;}

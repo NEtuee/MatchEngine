@@ -46,6 +46,9 @@ public:
     VkFormat FindDepthFormat();
     VkFormat FindSupportedFormat(const std::vector<VkFormat>& candidates,VkImageTiling tiling,VkFormatFeatureFlags features);
 
+    VkSampleCountFlagBits msaaSamples = VK_SAMPLE_COUNT_1_BIT;
+
+    const VkFormat GetSwapChainImageFormat() {return swapChainImageFormat;}
     const VkPhysicalDevice& GetPhysicalDevice() {return physicalDevice;}
     const VkDevice& GetDevice(){return device;}
     const VkExtent2D& GetExtend() {return swapChainExtent;}
@@ -61,6 +64,8 @@ private:
     void CreateInstance();
 
     void CreateLogicalDevice();
+    
+    VkSampleCountFlagBits GetMaxUsableSampleCount();
 
     void PickPhysicalDevice();
     bool IsDeviceSuitable(VkPhysicalDevice device);

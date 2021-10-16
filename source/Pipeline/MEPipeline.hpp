@@ -24,9 +24,12 @@ public:
 private:
     static std::vector<char> ReadFile(const std::string & path);
 
+    void CreateColorResources();
+
+    void GenerateMipmaps(VkImage image, VkFormat imageFormat, int32_t texWidth, int32_t texHeight, uint32_t mipLevels);
     void CopyBufferToImage(VkBuffer buffer,VkImage image, uint32_t width, uint32_t height);
-    void TransitionImageLayout(VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout);
-    void CreateImage(uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage& image, VkDeviceMemory& imageMemory);
+    void TransitionImageLayout(VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout,uint32_t mipLevels);
+    void CreateImage(uint32_t width, uint32_t height, uint32_t mipLevels, VkSampleCountFlagBits numSample, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage& image, VkDeviceMemory& imageMemory);
     void CreateTextureImage();
 
     void CreateDescriptorSets();
@@ -34,7 +37,7 @@ private:
     void CreateDescriptorSetLayout();
 
     void CreateTextureSampler();
-    VkImageView CreateImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags);
+    VkImageView CreateImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags,uint32_t mipLevels);
     void CreateTextureImageView();
     VkCommandBuffer BeginSingleTimeCommands();
     void EndSingleTimeCommands(VkCommandBuffer commandBuffer);
@@ -55,10 +58,15 @@ private:
     void CreateGraphicsPipeline(const std::string& vertPath, const std::string& fragPath);
     VkShaderModule CreateShaderModule(const std::vector<char>& code);
 
+    VkImage colorImage;
+    VkDeviceMemory colorImageMemory;
+    VkImageView colorImageView;
+
     VkImage depthImage;
     VkDeviceMemory depthImageMemory;
     VkImageView depthImageView;
 
+    uint32_t mipLevels;
     VkImageView textureImageView;
     VkSampler textureSampler;
     VkImage textureImage;

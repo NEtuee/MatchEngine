@@ -5,6 +5,8 @@
 #include <Device/MEDevice.hpp>
 #include <Window/MEWindow.hpp>
 
+#include "Vertex.hpp"
+
 namespace MatchEngine
 {
 const int MAX_FRAMES_IN_FLIGHT = 2;
@@ -40,6 +42,8 @@ private:
 
     void CreateDepthResources();
 
+    void LoadModel();
+
     void CreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory);
     void CreateUniformBuffers();
     void CreateIndexBuffer();
@@ -64,6 +68,9 @@ private:
     std::vector<VkDescriptorSet> descriptorSets;
 
     VkDescriptorSetLayout descSetLayout;
+
+    std::vector<Vertex> vertices;
+    std::vector<uint32_t> indices;
 
     VkBuffer vertexBuffer;
     VkDeviceMemory vertexBufferMemory;

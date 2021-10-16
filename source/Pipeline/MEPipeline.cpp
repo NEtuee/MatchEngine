@@ -1,5 +1,4 @@
 #include "MEPipeline.hpp"
-#include "Vertex.hpp"
 #include "UniformBufferObject.hpp"
 
 #include <fstream>
@@ -7,6 +6,7 @@
 #include <iostream>
 #include <vulkan/vulkan.h>
 #include <cstring>
+#include <unordered_map>
 
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
@@ -18,8 +18,15 @@
 #include <stb_image.h>
 #include <deprecated/stb_image.c>
 
+#define TINYOBJLOADER_IMPLEMENTATION
+#include <tiny_obj_loader.h>
+
 namespace MatchEngine
 {
+
+const std::string MODEL_PATH = "../Models/viking_room.obj";
+const std::string TEXTURE_PATH = "../Textures/viking_room.png";
+
 
 MEPipeline::MEPipeline(MEDevice& device, MEWindow& window, const std::string& vertPath, const std::string& fragPath)
             : device(device), window(window)
@@ -32,6 +39,10 @@ MEPipeline::MEPipeline(MEDevice& device, MEWindow& window, const std::string& ve
     CreateTextureImage();
     CreateTextureImageView();
     CreateTextureSampler();
+
+    LoadModel();
+    auto size = vertices.size();
+    std::cout << size << std::endl;
 
     CreateVertexBuffer();
     CreateIndexBuffer();
@@ -139,7 +150,7 @@ void MEPipeline::CraeteCommandBuffers()
         VkBuffer vertexBuffers[] = {vertexBuffer};
         VkDeviceSize offsets[] = {0};
         vkCmdBindVertexBuffers(commandBuffers[i],0,1,vertexBuffers,offsets);
-        vkCmdBindIndexBuffer(commandBuffers[i],indexBuffer,0,VK_INDEX_TYPE_UINT16);
+        vkCmdBindIndexBuffer(commandBuffers[i],indexBuffer,0,VK_INDEX_TYPE_UINT32);
 
         //vkCmdDraw(commandBuffers[i],static_cast<uint32_t>(vertices.size()),1,0,0);
         vkCmdBindDescriptorSets(commandBuffers[i],VK_PIPELINE_BIND_POINT_GRAPHICS,pipelineLayout,0,1,&descriptorSets[i],0,nullptr);
@@ -515,7 +526,7 @@ void MEPipeline::CreateTextureImage()
 {
     int texWidth, texHeight, texChannels;
 
-    stbi_uc* pixels = stbi_load("../Textures/testImage.png",&texWidth,&texHeight,&texChannels,STBI_rgb_alpha);
+    stbi_uc* pixels = stbi_load(TEXTURE_PATH.c_str(),&texWidth,&texHeight,&texChannels,STBI_rgb_alpha);
     VkDeviceSize imageSize = texWidth * texHeight * 4;
 
     if(!pixels)
@@ -716,6 +727,56 @@ void MEPipeline::CreateDepthResources()
 
     TransitionImageLayout(depthImage,depthFormat,VK_IMAGE_LAYOUT_UNDEFINED,VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
 }
+
+void MEPipeline::LoadModel()
+{
+    tinyobj::attrib_t attrib;
+    std::vector<tinyobj::shape_t> shapes;
+    std::vector<tinyobj::material_t> materials;
+    std::string err;
+
+    if(!tinyobj::LoadObj(&attrib,&shapes,&materials,&err,MODEL_PATH.c_str()))
+    {
+        throw std::runtime_error(err);
+    }
+
+    std::unordered_map<Vertex,uint32_t> uniqueVertices{};
+
+    for(const auto& shape : shapes)
+    {
+        for(const auto& index : shape.mesh.indices)
+        {
+            Vertex vertex{};
+
+            vertex.pos = 
+            {
+                attrib.vertices[3 * index.vertex_index + 0],
+                attrib.vertices[3 * index.vertex_index + 1],
+                attrib.vertices[3 * index.vertex_index + 2]
+            };
+
+            vertex.texCoord = 
+            {
+                attrib.texcoords[2 * index.texcoord_index + 0],
+                1.0f - attrib.texcoords[2 * index.texcoord_index + 1]
+            };
+
+            vertex.color = {1.0f,1.0f,1.0f};
+
+            if(uniqueVertices.count(vertex) == 0)
+            {
+                uniqueVertices[vertex] = static_cast<uint32_t>(vertices.size());
+                vertices.push_back(vertex);
+            }
+            
+            indices.push_back(uniqueVertices[vertex]);// indices.size());
+
+            // indices.push_back(indices.size());
+            // vertices.push_back(vertex);
+        }
+    }
+}
+
 
 void MEPipeline::CreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory)
 {

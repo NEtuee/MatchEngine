@@ -52,6 +52,7 @@ private:
     void CreateIndexBuffer();
     void CreateVertexBuffer();
     void CreateSyncObjects();
+    void RecordCommandBuffer(int imageIndex);
     void CraeteCommandBuffers();
     void CreateCommandPool();
     void CreateFrameBuffers();

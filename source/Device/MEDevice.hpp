@@ -14,6 +14,14 @@
 namespace MatchEngine
 {
 
+struct SwapChainSupportDetails
+{
+    VkSurfaceCapabilitiesKHR capabilities;
+    std::vector<VkSurfaceFormatKHR> formats;
+    std::vector<VkPresentModeKHR> presentModes;
+};
+
+
 struct QueueFamilyIndices
 {
     std::optional<uint32_t> graphicsFamily;
@@ -25,44 +33,38 @@ struct QueueFamilyIndices
     }
 };
 
-struct SwapChainSupportDetails
-{
-    VkSurfaceCapabilitiesKHR capabilities;
-    std::vector<VkSurfaceFormatKHR> formats;
-    std::vector<VkPresentModeKHR> presentModes;
-};
-
 class MEDevice
 {
 public:
     MEDevice(MEWindow & window);
     ~MEDevice();
 
-    void RecreateSwapChain();
-    void CleanupSwapChain();
-
     bool HasStencilComponent(VkFormat format);
     uint32_t FindMemoryType(uint32_t typeFilter,VkMemoryPropertyFlags properties);
     VkFormat FindDepthFormat();
     VkFormat FindSupportedFormat(const std::vector<VkFormat>& candidates,VkImageTiling tiling,VkFormatFeatureFlags features);
 
-    VkSampleCountFlagBits msaaSamples = VK_SAMPLE_COUNT_1_BIT;
+    SwapChainSupportDetails QuerySwapChainSupport(VkPhysicalDevice device);
 
-    const VkFormat GetSwapChainImageFormat() {return swapChainImageFormat;}
+    void CreateImage(uint32_t width, uint32_t height, uint32_t mipLevels, VkSampleCountFlagBits numSample, VkFormat format, VkImageTiling tiling, 
+                VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage& image, VkDeviceMemory& imageMemory);
+    VkImageView CreateImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags,uint32_t mipLevels);
+
+    //const VkFormat GetSwapChainImageFormat() {return swapChainImageFormat;}
     const VkPhysicalDevice& GetPhysicalDevice() {return physicalDevice;}
     const VkDevice& GetDevice(){return device;}
-    const VkExtent2D& GetExtend() {return swapChainExtent;}
-    const VkRenderPass& GetRenderPass() {return renderPass;}
-    const VkSwapchainKHR& GetSwapchain() {return swapChain;}
+    //const VkExtent2D& GetExtend() {return swapChainExtent;}
+    //const VkRenderPass& GetRenderPass() {return renderPass;}
+    //const VkSwapchainKHR& GetSwapchain() {return swapChain;}
     const VkQueue& GetGraphicsQueue() {return graphicsQueue;}
     const VkQueue& GetPresentQueue() {return presentQueue;}
-    const std::vector<VkImageView>& GetSwapChainImageViews() {return swapChainImageViews;}
-    const std::vector<VkImage>& GetSwapChainImages() {return swapChainImages;}
+    //const std::vector<VkImageView>& GetSwapChainImageViews() {return swapChainImageViews;}
+    //const std::vector<VkImage>& GetSwapChainImages() {return swapChainImages;}
     const QueueFamilyIndices GetQueueFamiliyIndices() {return FindQueueFamilies(physicalDevice);}
+    const VkSurfaceKHR& GetSurface() {return surface;}
 private:
     void InitVulkan();
     void CreateInstance();
-
     void CreateLogicalDevice();
     
     VkSampleCountFlagBits GetMaxUsableSampleCount();
@@ -72,14 +74,7 @@ private:
     bool CheckDeviceExtensionSupport(VkPhysicalDevice device);
     QueueFamilyIndices FindQueueFamilies(VkPhysicalDevice device);
 
-    void CreateRenderPass();
-    void CreateImageViews();
     void CreateSurface();
-    void CreateSwapChain();
-    SwapChainSupportDetails QuerySwapChainSupport(VkPhysicalDevice device);
-    VkSurfaceFormatKHR ChooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats);
-    VkPresentModeKHR ChooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes);
-    VkExtent2D ChooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities);
 
     void SetupDebugMessenger();
     void PopulateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo);
@@ -101,14 +96,6 @@ private:
 
     MEWindow & window;
 
-    std::vector<VkImage> swapChainImages;
-    std::vector<VkImageView> swapChainImageViews;
-
-    VkRenderPass renderPass;
-
-    VkFormat swapChainImageFormat;
-    VkExtent2D swapChainExtent;
-    VkSwapchainKHR swapChain;
     VkQueue presentQueue;
     VkSurfaceKHR surface;
     VkQueue graphicsQueue;
@@ -116,6 +103,9 @@ private:
     VkPhysicalDevice physicalDevice;
     VkInstance instance;
     VkDebugUtilsMessengerEXT debugMessenger;
+
+
+
 };
 
 }

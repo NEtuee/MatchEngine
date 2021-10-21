@@ -53,10 +53,6 @@
         "typeinfo": "cpp",
         "list": "cpp",
         "map": "cpp",
-        "unordered_set": "cpp",
-        "chrono": "cpp",
-        "ctime": "cpp",
-        "ratio": "cpp",
-        "iomanip": "cpp"
+        "unordered_set": "cpp"
     }
 }

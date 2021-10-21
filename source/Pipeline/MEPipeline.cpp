@@ -33,10 +33,6 @@ MEPipeline::MEPipeline(MEDevice& device, MEWindow& window, const std::string& ve
 {
     CreateDescriptorSetLayout();
     CreateGraphicsPipeline(vertPath,fragPath);
-    CreateCommandPool();
-    CreateColorResources();
-    CreateDepthResources();
-    CreateFrameBuffers();
     CreateTextureImage();
     CreateTextureImageView();
     CreateTextureSampler();
@@ -51,6 +47,8 @@ MEPipeline::MEPipeline(MEDevice& device, MEWindow& window, const std::string& ve
     CreateDescriptorPool();
     CreateDescriptorSets();
 
+    commandBuffer = new MECommandBuffer(device,device.GetCommandPool());
+    
     CraeteCommandBuffers();
     CreateSyncObjects();
 }
@@ -80,7 +78,7 @@ MEPipeline::~MEPipeline()
         vkDestroyFence(device.GetDevice(),inFlightFences[i],nullptr);
     }
     
-    vkDestroyCommandPool(device.GetDevice(),commandPool,nullptr);
+    //vkDestroyCommandPool(device.GetDevice(),commandPool,nullptr);
     
 }
 
@@ -106,63 +104,48 @@ std::vector<char> MEPipeline::ReadFile(const std::string & path)
 
 void MEPipeline::RecordCommandBuffer(int imageIndex)
 {
-        VkCommandBufferBeginInfo beginInfo{};
-        beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    VkCommandBufferBeginInfo beginInfo{};
+    beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 
-        if(vkBeginCommandBuffer(commandBuffers[imageIndex],&beginInfo) != VK_SUCCESS)
-        {
-            throw std::runtime_error("failed to begin recording command buffer");
-        }
-
-        VkRenderPassBeginInfo renderPassInfo{};
-        renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-        renderPassInfo.renderPass = device.GetRenderPass();
-        renderPassInfo.framebuffer = swapChainFrameBuffer[imageIndex];
-
-        renderPassInfo.renderArea.offset = {0,0};
-        renderPassInfo.renderArea.extent = device.GetExtend();
-
-        std::array<VkClearValue,2> clearValues{};
-        //VkClearValue clearColor = {{{0.0f,0.0f,0.0f,1.0f}}};
-        clearValues[0].color = {{0.0f,0.0f,0.0f,1.0f}};
-        clearValues[1].depthStencil = {1.0f, 0};
-
-        renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
-        renderPassInfo.pClearValues = clearValues.data();
-
-        vkCmdBeginRenderPass(commandBuffers[imageIndex],&renderPassInfo,VK_SUBPASS_CONTENTS_INLINE);
-        vkCmdBindPipeline(commandBuffers[imageIndex],VK_PIPELINE_BIND_POINT_GRAPHICS,graphicsPipeline);
-
-        VkBuffer vertexBuffers[] = {vertexBuffer};
-        VkDeviceSize offsets[] = {0};
-        vkCmdBindVertexBuffers(commandBuffers[imageIndex],0,1,vertexBuffers,offsets);
-        vkCmdBindIndexBuffer(commandBuffers[imageIndex],indexBuffer,0,VK_INDEX_TYPE_UINT32);
-
-        //vkCmdDraw(commandBuffers[i],static_cast<uint32_t>(vertices.size()),1,0,0);
-        vkCmdBindDescriptorSets(commandBuffers[imageIndex],VK_PIPELINE_BIND_POINT_GRAPHICS,pipelineLayout,0,1,&descriptorSets[imageIndex],0,nullptr);
-        vkCmdDrawIndexed(commandBuffers[imageIndex], static_cast<uint32_t>(indices.size()),1,0,0,0);
-        vkCmdEndRenderPass(commandBuffers[imageIndex]);
-        if(vkEndCommandBuffer(commandBuffers[imageIndex]) != VK_SUCCESS)
-        {
-            throw std::runtime_error("failed to record command buffer");
-        }
-}
-
-void MEPipeline::CraeteCommandBuffers()
-{
-    commandBuffers.resize(swapChainFrameBuffer.size());
-
-    VkCommandBufferAllocateInfo allocInfo{};
-    allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-    allocInfo.commandPool = commandPool;
-    allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    allocInfo.commandBufferCount = (uint32_t)commandBuffers.size();
-
-    if(vkAllocateCommandBuffers(device.GetDevice(),&allocInfo,commandBuffers.data()) != VK_SUCCESS)
+    if(vkBeginCommandBuffer(commandBuffer->GetCommandBuffer(imageIndex),&beginInfo) != VK_SUCCESS)
     {
-        throw std::runtime_error("failed to allocate command buffers");
+        throw std::runtime_error("failed to begin recording command buffer");
+    }
+
+    VkRenderPassBeginInfo renderPassInfo{};
+    renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+    renderPassInfo.renderPass = device.GetRenderPass();
+    renderPassInfo.framebuffer = device.GetSwapchainFrameBuffer()[imageIndex];
+
+    renderPassInfo.renderArea.offset = {0,0};
+    renderPassInfo.renderArea.extent = device.GetExtend();
+
+    std::array<VkClearValue,2> clearValues{};
+    //VkClearValue clearColor = {{{0.0f,0.0f,0.0f,1.0f}}};
+    clearValues[0].color = {{0.0f,0.0f,0.0f,1.0f}};
+    clearValues[1].depthStencil = {1.0f, 0};
+
+    renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
+    renderPassInfo.pClearValues = clearValues.data();
+
+    vkCmdBeginRenderPass(commandBuffer->GetCommandBuffer(imageIndex),&renderPassInfo,VK_SUBPASS_CONTENTS_INLINE);
+    vkCmdBindPipeline(commandBuffer->GetCommandBuffer(imageIndex),VK_PIPELINE_BIND_POINT_GRAPHICS,graphicsPipeline);
+
+    VkBuffer vertexBuffers[] = {vertexBuffer};
+    VkDeviceSize offsets[] = {0};
+    vkCmdBindVertexBuffers(commandBuffer->GetCommandBuffer(imageIndex),0,1,vertexBuffers,offsets);
+    vkCmdBindIndexBuffer(commandBuffer->GetCommandBuffer(imageIndex),indexBuffer,0,VK_INDEX_TYPE_UINT32);
+
+    //vkCmdDraw(commandBuffers[i],static_cast<uint32_t>(vertices.size()),1,0,0);
+    vkCmdBindDescriptorSets(commandBuffer->GetCommandBuffer(imageIndex),VK_PIPELINE_BIND_POINT_GRAPHICS,pipelineLayout,0,1,&descriptorSets[imageIndex],0,nullptr);
+    vkCmdDrawIndexed(commandBuffer->GetCommandBuffer(imageIndex), static_cast<uint32_t>(indices.size()),1,0,0,0);
+    vkCmdEndRenderPass(commandBuffer->GetCommandBuffer(imageIndex));
+    if(vkEndCommandBuffer(commandBuffer->GetCommandBuffer(imageIndex)) != VK_SUCCESS)
+    {
+        throw std::runtime_error("failed to record command buffer");
     }
 }
+
 
 void MEPipeline::DrawFrame()
 {
@@ -203,7 +186,7 @@ void MEPipeline::DrawFrame()
     submitInfo.pWaitDstStageMask = waitStages;
     
     submitInfo.commandBufferCount = 1;
-    submitInfo.pCommandBuffers = &commandBuffers[imageIndex];
+    submitInfo.pCommandBuffers = &commandBuffer->GetCommandBuffer(imageIndex);
 
     VkSemaphore signalSemaphores[] = {renderFinishedSemaphores[currentFrame]};
     submitInfo.signalSemaphoreCount = 1;
@@ -280,9 +263,6 @@ void MEPipeline::RecreateSwapChain()
     device.RecreateSwapChain();
     CreateGraphicsPipeline(vertPath,fragPath);
 
-    CreateColorResources();
-    CreateDepthResources();
-    CreateFrameBuffers();
     CreateUniformBuffers();
     CreateDescriptorPool();
     CreateDescriptorSets();
@@ -297,20 +277,18 @@ void MEPipeline::CleanupSwapChain()
     // {
     //     vkDestroyFramebuffer(device.GetDevice(),framebuffer,nullptr);
     // }
-    vkDestroyImageView(device.GetDevice(),colorImageView,nullptr);
-    vkDestroyImage(device.GetDevice(),colorImage,nullptr);
-    vkFreeMemory(device.GetDevice(),colorImageMemory,nullptr);
 
-    vkDestroyImageView(device.GetDevice(),depthImageView,nullptr);
-    vkDestroyImage(device.GetDevice(),depthImage,nullptr);
-    vkFreeMemory(device.GetDevice(),depthImageMemory,nullptr);
+    // vkDestroyImageView(device.GetDevice(),colorImageView,nullptr);
+    // vkDestroyImage(device.GetDevice(),colorImage,nullptr);
+    // vkFreeMemory(device.GetDevice(),colorImageMemory,nullptr);
 
-    for(size_t i = 0; i < swapChainFrameBuffer.size(); ++i)
-    {
-        vkDestroyFramebuffer(device.GetDevice(),swapChainFrameBuffer[i],nullptr);
-    }
+    // vkDestroyImageView(device.GetDevice(),depthImageView,nullptr);
+    // vkDestroyImage(device.GetDevice(),depthImage,nullptr);
+    // vkFreeMemory(device.GetDevice(),depthImageMemory,nullptr);
 
-    vkFreeCommandBuffers(device.GetDevice(),commandPool,static_cast<uint32_t>(commandBuffers.size()),commandBuffers.data());
+
+    //vkFreeCommandBuffers(device.GetDevice(),commandPool,static_cast<uint32_t>(commandBuffers.size()),commandBuffers.data());
+    commandBuffer->DestroyCommandBuffers();
 
     vkDestroyPipeline(device.GetDevice(), graphicsPipeline,nullptr);
     vkDestroyPipelineLayout(device.GetDevice(),pipelineLayout,nullptr);
@@ -324,17 +302,6 @@ void MEPipeline::CleanupSwapChain()
     vkDestroyDescriptorPool(device.GetDevice(),descriptorPool, nullptr);
 }
 
-void MEPipeline::CreateColorResources()
-{
-    VkFormat colorFormat = device.GetSwapChainImageFormat();
-
-    CreateImage(device.GetExtend().width,device.GetExtend().height,1,device.msaaSamples,colorFormat,
-                VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT |VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT ,
-                VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,colorImage,colorImageMemory);
-    
-    colorImageView = CreateImageView(colorImage,colorFormat,VK_IMAGE_ASPECT_COLOR_BIT,1);
-}
-
 void MEPipeline::GenerateMipmaps(VkImage image,VkFormat imageFormat, int32_t texWidth, int32_t texHeight, uint32_t mipLevels)
 {
     VkFormatProperties formatProperties;
@@ -345,7 +312,7 @@ void MEPipeline::GenerateMipmaps(VkImage image,VkFormat imageFormat, int32_t tex
         throw std::runtime_error("texture image format does not support linear blitting");
     }
 
-    VkCommandBuffer commandBuffer = BeginSingleTimeCommands();
+    VkCommandBuffer commandBuffer = device.GetCommandPool().BeginSingleTimeCommands();
 
     VkImageMemoryBarrier barrier{};
     barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
@@ -421,12 +388,12 @@ void MEPipeline::GenerateMipmaps(VkImage image,VkFormat imageFormat, int32_t tex
         0, nullptr,
         1, &barrier);
 
-    EndSingleTimeCommands(commandBuffer);
+    device.GetCommandPool().EndSingleTimeCommands(commandBuffer);
 }
 
 void MEPipeline::CopyBufferToImage(VkBuffer buffer,VkImage image, uint32_t width, uint32_t height)
 {
-    VkCommandBuffer commandBuffer = BeginSingleTimeCommands();
+    VkCommandBuffer commandBuffer = device.GetCommandPool().BeginSingleTimeCommands();
 
     VkBufferImageCopy region{};
     region.bufferOffset = 0;
@@ -451,124 +418,7 @@ void MEPipeline::CopyBufferToImage(VkBuffer buffer,VkImage image, uint32_t width
         1,
         &region);
 
-    EndSingleTimeCommands(commandBuffer);
-}
-
-void MEPipeline::TransitionImageLayout(VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout, uint32_t mipLevels)
-{
-    VkCommandBuffer commandBuffer = BeginSingleTimeCommands();
-
-    VkImageMemoryBarrier barrier{};
-    barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-    barrier.oldLayout = oldLayout;
-    barrier.newLayout = newLayout;
-    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    
-    barrier.image = image;
-    barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    barrier.subresourceRange.baseMipLevel = 0;
-    barrier.subresourceRange.levelCount = mipLevels;
-    barrier.subresourceRange.baseArrayLayer = 0;
-    barrier.subresourceRange.layerCount = 1;
-
-    barrier.srcAccessMask = 0;
-    barrier.dstAccessMask = 0;
-
-    VkPipelineStageFlags sourceStage;
-    VkPipelineStageFlags destinationStage;
-
-    if(newLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
-    {
-        barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
-        if(device.HasStencilComponent(format))
-        {
-            barrier.subresourceRange.aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT;
-        }
-    }
-    else
-    {
-        barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    }
-
-    if(oldLayout == VK_IMAGE_LAYOUT_UNDEFINED && newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)
-    {
-        barrier.srcAccessMask = 0;
-        barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-
-        sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-        destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
-    }
-    else if(oldLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
-    {
-        barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-        barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-
-        sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
-        destinationStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-    }
-    else if(oldLayout == VK_IMAGE_LAYOUT_UNDEFINED && newLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
-    {
-        barrier.srcAccessMask = 0;
-        barrier.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-
-        sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-        destinationStage = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
-    }
-    else
-    {
-        throw std::invalid_argument("unsupported layout transition");
-    }
-
-    vkCmdPipelineBarrier(commandBuffer, 
-        sourceStage, destinationStage,
-        0,
-        0,nullptr,
-        0,nullptr,
-        1,&barrier);
-
-    EndSingleTimeCommands(commandBuffer);
-
-
-
-}
-
-void MEPipeline::CreateImage(uint32_t width, uint32_t height,uint32_t mipLevels, VkSampleCountFlagBits numSample, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage& image, VkDeviceMemory& imageMemory)
-{
-    VkImageCreateInfo imageInfo{};
-    imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-    imageInfo.imageType = VK_IMAGE_TYPE_2D;
-    imageInfo.extent.width = width;
-    imageInfo.extent.height = height;
-    imageInfo.extent.depth = 1;
-    imageInfo.mipLevels = mipLevels;
-    imageInfo.arrayLayers = 1;
-    imageInfo.format = format;
-    imageInfo.tiling = tiling;
-    imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    imageInfo.usage = usage;
-    imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    imageInfo.samples = numSample;
-    
-    if(vkCreateImage(device.GetDevice(),&imageInfo,nullptr,&image) != VK_SUCCESS)
-    {
-        throw std::runtime_error("failed to create image");
-    }
-
-    VkMemoryRequirements memRequirements;
-    vkGetImageMemoryRequirements(device.GetDevice(),image,&memRequirements);
-
-    VkMemoryAllocateInfo allocInfo{};
-    allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-    allocInfo.allocationSize = memRequirements.size;
-    allocInfo.memoryTypeIndex = device.FindMemoryType(memRequirements.memoryTypeBits, properties);
-
-    if(vkAllocateMemory(device.GetDevice(),&allocInfo,nullptr,&imageMemory) != VK_SUCCESS)
-    {
-        throw std::runtime_error("failed to allocate image memory");
-    }
-
-    vkBindImageMemory(device.GetDevice(), image, imageMemory, 0);
+    device.GetCommandPool().EndSingleTimeCommands(commandBuffer);
 }
 
 void MEPipeline::CreateTextureSampler()
@@ -601,31 +451,10 @@ void MEPipeline::CreateTextureSampler()
     }
 }
 
-VkImageView MEPipeline::CreateImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags,uint32_t mipLevels)
-{
-    VkImageViewCreateInfo viewInfo{};
-    viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-    viewInfo.image = image;
-    viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-    viewInfo.format = format;
-    viewInfo.subresourceRange.aspectMask = aspectFlags;
-    viewInfo.subresourceRange.baseMipLevel = 0;
-    viewInfo.subresourceRange.levelCount = mipLevels;
-    viewInfo.subresourceRange.baseArrayLayer = 0;
-    viewInfo.subresourceRange.layerCount = 1;
-
-    VkImageView imageView;
-    if(vkCreateImageView(device.GetDevice(),&viewInfo,nullptr,&imageView) != VK_SUCCESS)
-    {
-        throw std::runtime_error("failed to create texture image view");
-    }
-
-    return imageView;
-}
 
 void MEPipeline::CreateTextureImageView()
 {
-    textureImageView = CreateImageView(textureImage,VK_FORMAT_R8G8B8A8_SRGB,VK_IMAGE_ASPECT_COLOR_BIT,mipLevels);
+    textureImageView = device.CreateImageView(textureImage,VK_FORMAT_R8G8B8A8_SRGB,VK_IMAGE_ASPECT_COLOR_BIT,mipLevels);
 }
 
 void MEPipeline::CreateTextureImage()
@@ -645,7 +474,7 @@ void MEPipeline::CreateTextureImage()
     VkBuffer stagingBuffer;
     VkDeviceMemory stagingBufferMemory;
 
-    CreateBuffer(imageSize,VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | 
+    device.CreateBuffer(imageSize,VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | 
                             VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,stagingBuffer, stagingBufferMemory);
 
     void* data;
@@ -655,11 +484,11 @@ void MEPipeline::CreateTextureImage()
 
     stbi_image_free(pixels);
 
-    CreateImage(texWidth, texHeight, mipLevels, VK_SAMPLE_COUNT_1_BIT, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL, 
+    device.CreateImage(texWidth, texHeight, mipLevels, VK_SAMPLE_COUNT_1_BIT, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL, 
                 VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, 
                 VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, textureImage,textureImageMemory);
 
-    TransitionImageLayout(textureImage,VK_FORMAT_R8G8B8A8_SRGB,VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,mipLevels);
+    device.TransitionImageLayout(textureImage,VK_FORMAT_R8G8B8A8_SRGB,VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,mipLevels);
     CopyBufferToImage(stagingBuffer,textureImage,static_cast<uint32_t>(texWidth),static_cast<uint32_t>(texHeight));
 
     //TransitionImageLayout(textureImage,VK_FORMAT_R8G8B8A8_SRGB,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,mipLevels);
@@ -778,45 +607,10 @@ void MEPipeline::CreateDescriptorSetLayout()
 
 }
 
-VkCommandBuffer MEPipeline::BeginSingleTimeCommands()
-{
-    VkCommandBufferAllocateInfo allocInfo{};
-    allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-    allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    allocInfo.commandPool = commandPool;
-    allocInfo.commandBufferCount = 1;
-
-    VkCommandBuffer commandBuffer;
-    vkAllocateCommandBuffers(device.GetDevice(),&allocInfo, &commandBuffer);
-
-    VkCommandBufferBeginInfo beginInfo{};
-    beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-    beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-
-    vkBeginCommandBuffer(commandBuffer, &beginInfo);
-
-    return commandBuffer;
-}
-
-void MEPipeline::EndSingleTimeCommands(VkCommandBuffer commandBuffer)
-{
-    vkEndCommandBuffer(commandBuffer);
-
-    VkSubmitInfo submitInfo{};
-    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-    submitInfo.commandBufferCount = 1;
-    submitInfo.pCommandBuffers = &commandBuffer;
-
-    vkQueueSubmit(device.GetGraphicsQueue(),1,&submitInfo,VK_NULL_HANDLE);
-    vkQueueWaitIdle(device.GetGraphicsQueue());
-
-    vkFreeCommandBuffers(device.GetDevice(),commandPool,1,&commandBuffer);
-}
-
 
 void MEPipeline::CopyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size)
 {
-    auto commandBuffer = BeginSingleTimeCommands();
+    auto commandBuffer = device.GetCommandPool().BeginSingleTimeCommands();
 
     VkBufferCopy copyRegion{};
     copyRegion.srcOffset = 0;
@@ -824,18 +618,8 @@ void MEPipeline::CopyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize
     copyRegion.size = size;
     vkCmdCopyBuffer(commandBuffer,srcBuffer,dstBuffer,1,&copyRegion);
 
-    EndSingleTimeCommands(commandBuffer);
-}
+    device.GetCommandPool().EndSingleTimeCommands(commandBuffer);
 
-void MEPipeline::CreateDepthResources()
-{
-    VkFormat depthFormat = device.FindDepthFormat();
-    CreateImage(device.GetExtend().width,device.GetExtend().height,1, device.msaaSamples,depthFormat,VK_IMAGE_TILING_OPTIMAL,
-                VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, depthImage, depthImageMemory);
-    
-    depthImageView = CreateImageView(depthImage,depthFormat,VK_IMAGE_ASPECT_DEPTH_BIT,1);
-
-    TransitionImageLayout(depthImage,depthFormat,VK_IMAGE_LAYOUT_UNDEFINED,VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,1);
 }
 
 void MEPipeline::LoadModel()
@@ -887,34 +671,9 @@ void MEPipeline::LoadModel()
     }
 }
 
-
-void MEPipeline::CreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory)
+void MEPipeline::CraeteCommandBuffers()
 {
-    VkBufferCreateInfo bufferInfo{};
-    bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-    bufferInfo.size = size;
-    bufferInfo.usage = usage;
-    bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-
-    if(vkCreateBuffer(device.GetDevice(),&bufferInfo,nullptr,&buffer) != VK_SUCCESS)
-    {
-        throw std::runtime_error("failed to create vertex buffer");
-    }
-
-    VkMemoryRequirements memRequirments;
-    vkGetBufferMemoryRequirements(device.GetDevice(),buffer,&memRequirments);
-
-    VkMemoryAllocateInfo allocInfo{};
-    allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-    allocInfo.allocationSize = memRequirments.size;
-    allocInfo.memoryTypeIndex = device.FindMemoryType(memRequirments.memoryTypeBits,properties);
-    
-    if(vkAllocateMemory(device.GetDevice(),&allocInfo,nullptr,&bufferMemory) != VK_SUCCESS)
-    {
-        throw std::runtime_error("failed to allocate buffer memory");
-    }
-
-    vkBindBufferMemory(device.GetDevice(),buffer,bufferMemory,0);
+    commandBuffer->CreateCommandBuffers(device.GetSwapchainFrameBuffer().size());
 }
 
 void MEPipeline::CreateUniformBuffers()
@@ -926,7 +685,7 @@ void MEPipeline::CreateUniformBuffers()
 
     for(size_t i = 0; i < device.GetSwapChainImages().size(); ++i)
     {
-        CreateBuffer(bufferSize,VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | 
+        device.CreateBuffer(bufferSize,VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | 
                                                             VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, uniformBuffers[i],uniformBuffersMemory[i]);
 
     }
@@ -938,7 +697,7 @@ void MEPipeline::CreateIndexBuffer()
 
     VkBuffer stagingBuffer;
     VkDeviceMemory stagingBufferMemory;
-    CreateBuffer(bufferSize,VK_BUFFER_USAGE_TRANSFER_SRC_BIT,VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+    device.CreateBuffer(bufferSize,VK_BUFFER_USAGE_TRANSFER_SRC_BIT,VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
                             VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
 
     void* data;
@@ -946,7 +705,7 @@ void MEPipeline::CreateIndexBuffer()
     memcpy(data,indices.data(),(size_t)bufferSize);
     vkUnmapMemory(device.GetDevice(),stagingBufferMemory);
 
-    CreateBuffer(bufferSize,VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+    device.CreateBuffer(bufferSize,VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
                             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, indexBuffer,indexBufferMemory);
 
     CopyBuffer(stagingBuffer,indexBuffer,bufferSize);
@@ -961,7 +720,7 @@ void MEPipeline::CreateVertexBuffer()
 
     VkBuffer stagingBuffer;
     VkDeviceMemory stagingBufferMemory;
-    CreateBuffer(bufferSize,VK_BUFFER_USAGE_TRANSFER_SRC_BIT,VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+    device.CreateBuffer(bufferSize,VK_BUFFER_USAGE_TRANSFER_SRC_BIT,VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
                             VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
 
     void* data;
@@ -969,7 +728,7 @@ void MEPipeline::CreateVertexBuffer()
     memcpy(data,vertices.data(),(size_t)bufferSize);
     vkUnmapMemory(device.GetDevice(),stagingBufferMemory);
 
-    CreateBuffer(bufferSize,VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+    device.CreateBuffer(bufferSize,VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
                             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, vertexBuffer,vertexBufferMemory);
 
     CopyBuffer(stagingBuffer,vertexBuffer,bufferSize);
@@ -1003,49 +762,6 @@ void MEPipeline::CreateSyncObjects()
     }
 
     
-}
-
-void MEPipeline::CreateCommandPool()
-{
-    QueueFamilyIndices queueFamilyIndices = device.GetQueueFamiliyIndices();
-    
-    VkCommandPoolCreateInfo poolInfo{};
-    poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-    poolInfo.queueFamilyIndex = queueFamilyIndices.graphicsFamily.value();
-
-    if(vkCreateCommandPool(device.GetDevice(),&poolInfo,nullptr,&commandPool) != VK_SUCCESS)
-    {
-        throw std::runtime_error("failed to create command pool");
-    }
-}
-
-void MEPipeline::CreateFrameBuffers()
-{
-    swapChainFrameBuffer.resize(device.GetSwapChainImageViews().size());
-
-    for(size_t i = 0; i < device.GetSwapChainImageViews().size(); ++i)
-    {
-        std::array<VkImageView,3> attachments = 
-        {
-            colorImageView,
-            depthImageView,
-            device.GetSwapChainImageViews()[i]
-        };
-
-        VkFramebufferCreateInfo framebufferInfo{};
-        framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-        framebufferInfo.renderPass = device.GetRenderPass();
-        framebufferInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
-        framebufferInfo.pAttachments = attachments.data();
-        framebufferInfo.width = device.GetExtend().width;
-        framebufferInfo.height = device.GetExtend().height;
-        framebufferInfo.layers = 1;
-
-        if(vkCreateFramebuffer(device.GetDevice(),&framebufferInfo,nullptr,&swapChainFrameBuffer[i]) != VK_SUCCESS)
-        {
-            throw std::runtime_error("failed to create framebuffer");
-        }
-    }
 }
 
 void MEPipeline::CreateGraphicsPipeline(const std::string& vertPath, const std::string& fragPath)

@@ -2,6 +2,7 @@
 #include <vulkan/vulkan.h>
 #include <vector>
 #include <optional>
+#include <memory>
 
 #define VK_USE_PLATFORM_WIN32_KHR
 #define GLFW_INCLUDE_VULKAN
@@ -10,6 +11,8 @@
 #include <GLFW/glfw3native.h>
 
 #include <Window/MEWindow.hpp>
+#include "Image/MEImage.hpp"
+#include "CommandBuffer/MECommandPool.hpp"
 
 namespace MatchEngine
 {
@@ -46,6 +49,13 @@ public:
     VkFormat FindDepthFormat();
     VkFormat FindSupportedFormat(const std::vector<VkFormat>& candidates,VkImageTiling tiling,VkFormatFeatureFlags features);
 
+    void CreateImage(uint32_t width, uint32_t height, uint32_t mipLevels, VkSampleCountFlagBits numSample, VkFormat format, VkImageTiling tiling, 
+                VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage& image, VkDeviceMemory& imageMemory);
+    VkImageView CreateImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags,uint32_t mipLevels);
+
+    void CreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory);
+    void TransitionImageLayout(VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout,uint32_t mipLevels);
+
     VkSampleCountFlagBits msaaSamples = VK_SAMPLE_COUNT_1_BIT;
 
     const VkFormat GetSwapChainImageFormat() {return swapChainImageFormat;}
@@ -59,6 +69,8 @@ public:
     const std::vector<VkImageView>& GetSwapChainImageViews() {return swapChainImageViews;}
     const std::vector<VkImage>& GetSwapChainImages() {return swapChainImages;}
     const QueueFamilyIndices GetQueueFamiliyIndices() {return FindQueueFamilies(physicalDevice);}
+    MECommandPool& GetCommandPool() {return *commandPool;}
+    const std::vector<VkFramebuffer>& GetSwapchainFrameBuffer() {return swapChainFrameBuffer;}
 private:
     void InitVulkan();
     void CreateInstance();
@@ -72,9 +84,13 @@ private:
     bool CheckDeviceExtensionSupport(VkPhysicalDevice device);
     QueueFamilyIndices FindQueueFamilies(VkPhysicalDevice device);
 
+    void CreateColorResources();
+    void CreateDepthResources();
+
     void CreateRenderPass();
-    void CreateImageViews();
+    void CreateSwapChainImageViews();
     void CreateSurface();
+    void CreateFrameBuffers();
     void CreateSwapChain();
     SwapChainSupportDetails QuerySwapChainSupport(VkPhysicalDevice device);
     VkSurfaceFormatKHR ChooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats);
@@ -103,6 +119,12 @@ private:
 
     std::vector<VkImage> swapChainImages;
     std::vector<VkImageView> swapChainImageViews;
+    std::vector<VkFramebuffer> swapChainFrameBuffer;
+
+    std::unique_ptr<MEImage> colorImage;
+    std::unique_ptr<MEImage> depthImage;
+
+    std::unique_ptr<MECommandPool> commandPool;
 
     VkRenderPass renderPass;
 

@@ -3,6 +3,7 @@
 #include <Window/MEWindow.hpp>
 #include <Device/MEDevice.hpp>
 #include <Pipeline/MEPipeline.hpp>
+#include <Swapchain/MESwapchain.hpp>
 
 namespace MatchEngine
 {
@@ -17,7 +18,8 @@ public:
 private:
     MEWindow meWindow{WIDTH,HEIGHT,"MyWindow"};
     MEDevice meDevice{meWindow};
-    MEPipeline mePipeline{meDevice,meWindow,"../Shaders/Simple.vert.spv","../Shaders/Simple.frag.spv"};
+    MESwapchain meSwapchain{meDevice,meWindow};
+    MEPipeline mePipeline{meDevice,meWindow,meSwapchain,"../Shaders/Simple.vert.spv","../Shaders/Simple.frag.spv"};
 };
 
 }

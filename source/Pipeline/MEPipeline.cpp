@@ -28,8 +28,8 @@ const std::string MODEL_PATH = "../Models/viking_room.obj";
 const std::string TEXTURE_PATH = "../Textures/viking_room.png";
 
 
-MEPipeline::MEPipeline(MEDevice& device, MEWindow& window, const std::string& vertPath, const std::string& fragPath)
-            : device(device), window(window)
+MEPipeline::MEPipeline(MEDevice& device, MEWindow& window, MESwapchain& swapchain, const std::string& vertPath, const std::string& fragPath)
+            : device(device), window(window), swapchain(swapchain)
 {
     CreateDescriptorSetLayout();
     CreateGraphicsPipeline(vertPath,fragPath);
@@ -38,8 +38,9 @@ MEPipeline::MEPipeline(MEDevice& device, MEWindow& window, const std::string& ve
     CreateTextureSampler();
 
     LoadModel();
-    auto size = vertices.size();
-    std::cout << size << std::endl;
+
+    commandBuffer = new MECommandBuffer(device,device.GetCommandPool());
+    CraeteCommandBuffers();
 
     CreateVertexBuffer();
     CreateIndexBuffer();
@@ -47,9 +48,6 @@ MEPipeline::MEPipeline(MEDevice& device, MEWindow& window, const std::string& ve
     CreateDescriptorPool();
     CreateDescriptorSets();
 
-    commandBuffer = new MECommandBuffer(device,device.GetCommandPool());
-    
-    CraeteCommandBuffers();
     CreateSyncObjects();
 }
 
@@ -114,11 +112,11 @@ void MEPipeline::RecordCommandBuffer(int imageIndex)
 
     VkRenderPassBeginInfo renderPassInfo{};
     renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-    renderPassInfo.renderPass = device.GetRenderPass();
-    renderPassInfo.framebuffer = device.GetSwapchainFrameBuffer()[imageIndex];
+    renderPassInfo.renderPass = swapchain.GetRenderPass();
+    renderPassInfo.framebuffer = swapchain.GetSwapchainFrameBuffer()[imageIndex];
 
     renderPassInfo.renderArea.offset = {0,0};
-    renderPassInfo.renderArea.extent = device.GetExtend();
+    renderPassInfo.renderArea.extent = swapchain.GetSwapchainExtent();
 
     std::array<VkClearValue,2> clearValues{};
     //VkClearValue clearColor = {{{0.0f,0.0f,0.0f,1.0f}}};
@@ -136,9 +134,13 @@ void MEPipeline::RecordCommandBuffer(int imageIndex)
     vkCmdBindVertexBuffers(commandBuffer->GetCommandBuffer(imageIndex),0,1,vertexBuffers,offsets);
     vkCmdBindIndexBuffer(commandBuffer->GetCommandBuffer(imageIndex),indexBuffer,0,VK_INDEX_TYPE_UINT32);
 
-    //vkCmdDraw(commandBuffers[i],static_cast<uint32_t>(vertices.size()),1,0,0);
-    vkCmdBindDescriptorSets(commandBuffer->GetCommandBuffer(imageIndex),VK_PIPELINE_BIND_POINT_GRAPHICS,pipelineLayout,0,1,&descriptorSets[imageIndex],0,nullptr);
-    vkCmdDrawIndexed(commandBuffer->GetCommandBuffer(imageIndex), static_cast<uint32_t>(indices.size()),1,0,0,0);
+    for(int i = 0; i < 3; ++i)
+    {
+        vkCmdBindDescriptorSets(commandBuffer->GetCommandBuffer(imageIndex),VK_PIPELINE_BIND_POINT_GRAPHICS,pipelineLayout,0,1,&descriptorSets[i],0,nullptr);
+        vkCmdDrawIndexed(commandBuffer->GetCommandBuffer(imageIndex), static_cast<uint32_t>(indices.size()),1,0,0,0);
+    }
+    
+
     vkCmdEndRenderPass(commandBuffer->GetCommandBuffer(imageIndex));
     if(vkEndCommandBuffer(commandBuffer->GetCommandBuffer(imageIndex)) != VK_SUCCESS)
     {
@@ -153,7 +155,7 @@ void MEPipeline::DrawFrame()
     //vkResetFences(device.GetDevice(),1,&inFlightFences[currentFrame]);
 
     uint32_t imageIndex;
-    auto result = vkAcquireNextImageKHR(device.GetDevice(), device.GetSwapchain(),UINT64_MAX,imageAvailableSemaphores[currentFrame],VK_NULL_HANDLE, &imageIndex);
+    auto result = vkAcquireNextImageKHR(device.GetDevice(), swapchain.GetSwapchain(),UINT64_MAX,imageAvailableSemaphores[currentFrame],VK_NULL_HANDLE, &imageIndex);
 
     if(result == VK_ERROR_OUT_OF_DATE_KHR)
     {
@@ -172,8 +174,8 @@ void MEPipeline::DrawFrame()
 
     imagesInFlight[imageIndex] = inFlightFences[currentFrame];
 
-    UpdateUniformBuffer(imageIndex);
-
+    std::cout << imageIndex << "\n";
+    UpdateUniformBuffer(imageIndex,0.3f);
     RecordCommandBuffer(imageIndex);
 
     VkSubmitInfo submitInfo{};
@@ -204,7 +206,7 @@ void MEPipeline::DrawFrame()
     presentInfo.waitSemaphoreCount = 1;
     presentInfo.pWaitSemaphores = signalSemaphores;
 
-    VkSwapchainKHR swapChains[] = {device.GetSwapchain()};
+    VkSwapchainKHR swapChains[] = {swapchain.GetSwapchain()};
     presentInfo.swapchainCount = 1;
     presentInfo.pSwapchains = swapChains;
     presentInfo.pImageIndices = &imageIndex;
@@ -225,7 +227,7 @@ void MEPipeline::DrawFrame()
     currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
 }
 
-void MEPipeline::UpdateUniformBuffer(uint32_t currentImage)
+void MEPipeline::UpdateUniformBuffer(uint32_t currentImage,float plus)
 {
     static auto startTime = std::chrono::high_resolution_clock::now();
     auto currentTime = std::chrono::high_resolution_clock::now();
@@ -233,8 +235,8 @@ void MEPipeline::UpdateUniformBuffer(uint32_t currentImage)
     float time = std::chrono::duration<float,std::chrono::seconds::period>(currentTime - startTime).count();
 
     UniformBufferObject ubo{};
-    auto extend = device.GetExtend();
-    ubo.model = glm::rotate(glm::mat4(1.0f),time * glm::radians(90.0f),glm::vec3(.0f,.0f,1.0f));
+    auto extend = swapchain.GetSwapchainExtent();
+    ubo.model = glm::translate(glm::mat4(1.0f),glm::vec3(((float)currentImage) * plus,0.f,((float)currentImage) * plus)) * glm::rotate(glm::mat4(1.0f),time * glm::radians(90.0f),glm::vec3(.0f,.0f,1.0f));
     ubo.view = glm::lookAt(glm::vec3(2.0f,2.0f,2.0f),glm::vec3(0.f,0.f,0.f),glm::vec3(0.f,0.f,1.0f));
     ubo.proj = glm::perspective(glm::radians(45.0f),extend.width / (float)extend.height,0.1f,10.f);
     ubo.proj[1][1] *= -1;
@@ -258,42 +260,30 @@ void MEPipeline::RecreateSwapChain()
     vkDeviceWaitIdle(device.GetDevice());
 
     CleanupSwapChain();
-    device.CleanupSwapChain();
+    swapchain.CleanupSwapChain();
+    swapchain.RecreateSwapChain();
 
-    device.RecreateSwapChain();
+    CraeteCommandBuffers();
+
+
     CreateGraphicsPipeline(vertPath,fragPath);
 
     CreateUniformBuffers();
     CreateDescriptorPool();
     CreateDescriptorSets();
-    CraeteCommandBuffers();
 
-    imagesInFlight.resize(device.GetSwapChainImages().size(),VK_NULL_HANDLE);
+
+    imagesInFlight.resize(swapchain.GetSwapchainImagesSize(),VK_NULL_HANDLE);
 }
 
 void MEPipeline::CleanupSwapChain()
 {
-    // for(auto framebuffer : swapChainFrameBuffer)
-    // {
-    //     vkDestroyFramebuffer(device.GetDevice(),framebuffer,nullptr);
-    // }
-
-    // vkDestroyImageView(device.GetDevice(),colorImageView,nullptr);
-    // vkDestroyImage(device.GetDevice(),colorImage,nullptr);
-    // vkFreeMemory(device.GetDevice(),colorImageMemory,nullptr);
-
-    // vkDestroyImageView(device.GetDevice(),depthImageView,nullptr);
-    // vkDestroyImage(device.GetDevice(),depthImage,nullptr);
-    // vkFreeMemory(device.GetDevice(),depthImageMemory,nullptr);
-
-
-    //vkFreeCommandBuffers(device.GetDevice(),commandPool,static_cast<uint32_t>(commandBuffers.size()),commandBuffers.data());
     commandBuffer->DestroyCommandBuffers();
 
     vkDestroyPipeline(device.GetDevice(), graphicsPipeline,nullptr);
     vkDestroyPipelineLayout(device.GetDevice(),pipelineLayout,nullptr);
 
-    for(size_t i = 0; i < device.GetSwapChainImages().size(); ++i)
+    for(size_t i = 0; i < swapchain.GetSwapchainImagesSize(); ++i)
     {
         vkDestroyBuffer(device.GetDevice(),uniformBuffers[i],nullptr);
         vkFreeMemory(device.GetDevice(),uniformBuffersMemory[i],nullptr);
@@ -501,20 +491,20 @@ void MEPipeline::CreateTextureImage()
 
 void MEPipeline::CreateDescriptorSets()
 {
-    std::vector<VkDescriptorSetLayout> layouts(device.GetSwapChainImages().size(),descSetLayout);
+    std::vector<VkDescriptorSetLayout> layouts(swapchain.GetSwapchainImagesSize(),descSetLayout);
     VkDescriptorSetAllocateInfo allocInfo{};
     allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
     allocInfo.descriptorPool = descriptorPool;
-    allocInfo.descriptorSetCount = static_cast<uint32_t>(device.GetSwapChainImages().size());
+    allocInfo.descriptorSetCount = static_cast<uint32_t>(swapchain.GetSwapchainImagesSize());
     allocInfo.pSetLayouts = layouts.data();
 
-    descriptorSets.resize(device.GetSwapChainImages().size());
+    descriptorSets.resize(swapchain.GetSwapchainImagesSize());
     if(vkAllocateDescriptorSets(device.GetDevice(),&allocInfo,descriptorSets.data()) != VK_SUCCESS)
     {
         throw std::runtime_error("failed to allocate descriptor sets");
     }
 
-    for(size_t i = 0; i < device.GetSwapChainImages().size(); ++i)
+    for(size_t i = 0; i < swapchain.GetSwapchainImagesSize(); ++i)
     {
         VkDescriptorBufferInfo bufferInfo{};
         bufferInfo.buffer = uniformBuffers[i];
@@ -557,15 +547,15 @@ void MEPipeline::CreateDescriptorPool()
 
     std::array<VkDescriptorPoolSize,2> poolSizes{};
     poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    poolSizes[0].descriptorCount = static_cast<uint32_t>(device.GetSwapChainImages().size());
+    poolSizes[0].descriptorCount = static_cast<uint32_t>(swapchain.GetSwapchainImagesSize());
     poolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    poolSizes[1].descriptorCount = static_cast<uint32_t>(device.GetSwapChainImages().size());
+    poolSizes[1].descriptorCount = static_cast<uint32_t>(swapchain.GetSwapchainImagesSize());
     
     VkDescriptorPoolCreateInfo poolInfo{};
     poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
     poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
     poolInfo.pPoolSizes = poolSizes.data();
-    poolInfo.maxSets = static_cast<uint32_t>(device.GetSwapChainImages().size());
+    poolInfo.maxSets = static_cast<uint32_t>(swapchain.GetSwapchainImagesSize());
 
     if(vkCreateDescriptorPool(device.GetDevice(),&poolInfo,nullptr,&descriptorPool) != VK_SUCCESS)
     {
@@ -671,19 +661,14 @@ void MEPipeline::LoadModel()
     }
 }
 
-void MEPipeline::CraeteCommandBuffers()
-{
-    commandBuffer->CreateCommandBuffers(device.GetSwapchainFrameBuffer().size());
-}
-
 void MEPipeline::CreateUniformBuffers()
 {
     VkDeviceSize bufferSize = sizeof(UniformBufferObject);
 
-    uniformBuffers.resize(device.GetSwapChainImages().size());
-    uniformBuffersMemory.resize(device.GetSwapChainImages().size());
+    uniformBuffers.resize(swapchain.GetSwapchainImagesSize());
+    uniformBuffersMemory.resize(swapchain.GetSwapchainImagesSize());
 
-    for(size_t i = 0; i < device.GetSwapChainImages().size(); ++i)
+    for(size_t i = 0; i < swapchain.GetSwapchainImagesSize(); ++i)
     {
         device.CreateBuffer(bufferSize,VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | 
                                                             VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, uniformBuffers[i],uniformBuffersMemory[i]);
@@ -742,7 +727,7 @@ void MEPipeline::CreateSyncObjects()
     imageAvailableSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
     renderFinishedSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
     inFlightFences.resize(MAX_FRAMES_IN_FLIGHT);
-    imagesInFlight.resize(device.GetSwapChainImages().size(),VK_NULL_HANDLE);
+    imagesInFlight.resize(swapchain.GetSwapchainImagesSize(),VK_NULL_HANDLE);
 
     VkSemaphoreCreateInfo semaphoreInfo{};
     semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
@@ -809,14 +794,14 @@ void MEPipeline::CreateGraphicsPipeline(const std::string& vertPath, const std::
     VkViewport viewport{};
     viewport.x = 0.0f;
     viewport.y = 0.0f;
-    viewport.width = (float)device.GetExtend().width;
-    viewport.height = (float)device.GetExtend().height;
+    viewport.width = (float)swapchain.GetSwapchainExtent().width;
+    viewport.height = (float)swapchain.GetSwapchainExtent().height;
     viewport.minDepth = 0.0f;
     viewport.maxDepth = 1.0f;
 
     VkRect2D scissor{};
     scissor.offset = {0, 0};
-    scissor.extent = device.GetExtend();
+    scissor.extent = swapchain.GetSwapchainExtent();
 
     VkPipelineViewportStateCreateInfo viewportState{};
     viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
@@ -893,7 +878,7 @@ void MEPipeline::CreateGraphicsPipeline(const std::string& vertPath, const std::
     pipelineInfo.pDepthStencilState = &depthStencil;
     
     pipelineInfo.layout = pipelineLayout;
-    pipelineInfo.renderPass = device.GetRenderPass();
+    pipelineInfo.renderPass = swapchain.GetRenderPass();
     pipelineInfo.subpass = 0;
     pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
     
@@ -920,6 +905,11 @@ VkShaderModule MEPipeline::CreateShaderModule(const std::vector<char>& code)
     }
 
     return shaderModule;
+}
+
+void MEPipeline::CraeteCommandBuffers()
+{
+    commandBuffer->CreateCommandBuffers(swapchain.GetSwapchainFrameBufferSize());
 }
 
 }

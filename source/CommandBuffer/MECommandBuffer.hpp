@@ -15,7 +15,6 @@ public:
     MECommandBuffer(MEDevice& device, MECommandPool & commandPool);
     ~MECommandBuffer();
 
-    void RecordCommandBuffer(int imageIndex);
     void CreateCommandBuffers(size_t size);
     void DestroyCommandBuffers();
 

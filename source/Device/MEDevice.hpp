@@ -41,9 +41,6 @@ public:
     MEDevice(MEWindow & window);
     ~MEDevice();
 
-    void RecreateSwapChain();
-    void CleanupSwapChain();
-
     bool HasStencilComponent(VkFormat format);
     uint32_t FindMemoryType(uint32_t typeFilter,VkMemoryPropertyFlags properties);
     VkFormat FindDepthFormat();
@@ -56,21 +53,20 @@ public:
     void CreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory);
     void TransitionImageLayout(VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout,uint32_t mipLevels);
 
-    VkSampleCountFlagBits msaaSamples = VK_SAMPLE_COUNT_1_BIT;
+    SwapChainSupportDetails QuerySwapChainSupport(VkPhysicalDevice device);
+    VkSurfaceFormatKHR ChooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats);
+    VkPresentModeKHR ChooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes);
+    VkExtent2D ChooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities);
 
-    const VkFormat GetSwapChainImageFormat() {return swapChainImageFormat;}
     const VkPhysicalDevice& GetPhysicalDevice() {return physicalDevice;}
     const VkDevice& GetDevice(){return device;}
-    const VkExtent2D& GetExtend() {return swapChainExtent;}
-    const VkRenderPass& GetRenderPass() {return renderPass;}
-    const VkSwapchainKHR& GetSwapchain() {return swapChain;}
     const VkQueue& GetGraphicsQueue() {return graphicsQueue;}
     const VkQueue& GetPresentQueue() {return presentQueue;}
-    const std::vector<VkImageView>& GetSwapChainImageViews() {return swapChainImageViews;}
-    const std::vector<VkImage>& GetSwapChainImages() {return swapChainImages;}
     const QueueFamilyIndices GetQueueFamiliyIndices() {return FindQueueFamilies(physicalDevice);}
+    const VkSurfaceKHR& GetSurface() {return surface;}
     MECommandPool& GetCommandPool() {return *commandPool;}
-    const std::vector<VkFramebuffer>& GetSwapchainFrameBuffer() {return swapChainFrameBuffer;}
+
+    VkSampleCountFlagBits msaaSamples = VK_SAMPLE_COUNT_1_BIT;
 private:
     void InitVulkan();
     void CreateInstance();
@@ -84,18 +80,7 @@ private:
     bool CheckDeviceExtensionSupport(VkPhysicalDevice device);
     QueueFamilyIndices FindQueueFamilies(VkPhysicalDevice device);
 
-    void CreateColorResources();
-    void CreateDepthResources();
-
-    void CreateRenderPass();
-    void CreateSwapChainImageViews();
     void CreateSurface();
-    void CreateFrameBuffers();
-    void CreateSwapChain();
-    SwapChainSupportDetails QuerySwapChainSupport(VkPhysicalDevice device);
-    VkSurfaceFormatKHR ChooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats);
-    VkPresentModeKHR ChooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes);
-    VkExtent2D ChooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities);
 
     void SetupDebugMessenger();
     void PopulateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo);
@@ -117,22 +102,10 @@ private:
 
     MEWindow & window;
 
-    std::vector<VkImage> swapChainImages;
-    std::vector<VkImageView> swapChainImageViews;
-    std::vector<VkFramebuffer> swapChainFrameBuffer;
-
-    std::unique_ptr<MEImage> colorImage;
-    std::unique_ptr<MEImage> depthImage;
-
     std::unique_ptr<MECommandPool> commandPool;
 
-    VkRenderPass renderPass;
-
-    VkFormat swapChainImageFormat;
-    VkExtent2D swapChainExtent;
-    VkSwapchainKHR swapChain;
-    VkQueue presentQueue;
     VkSurfaceKHR surface;
+    VkQueue presentQueue;
     VkQueue graphicsQueue;
     VkDevice device;
     VkPhysicalDevice physicalDevice;

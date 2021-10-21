@@ -6,7 +6,7 @@
 #include <Window/MEWindow.hpp>
 
 #include "Vertex.hpp"
-#include "CommandBuffer/MECommandBuffer.hpp"
+#include "Swapchain/MESwapchain.hpp"
 
 
 namespace MatchEngine
@@ -16,11 +16,11 @@ const int MAX_FRAMES_IN_FLIGHT = 2;
 class MEPipeline
 {
 public:
-    MEPipeline(MEDevice& device, MEWindow& window, const std::string& vertPath, const std::string& fragPath);
+    MEPipeline(MEDevice& device, MEWindow& window, MESwapchain& swapchain, const std::string& vertPath, const std::string& fragPath);
     ~MEPipeline();
 
     void DrawFrame();
-    void UpdateUniformBuffer(uint32_t currentImage);
+    void UpdateUniformBuffer(uint32_t currentImage,float plus);
     void RecreateSwapChain();
     void CleanupSwapChain();
 private:
@@ -42,13 +42,10 @@ private:
 
     void LoadModel();
 
-    void CraeteCommandBuffers();
-
     void CreateUniformBuffers();
     void CreateIndexBuffer();
     void CreateVertexBuffer();
     void CreateSyncObjects();
-    void RecordCommandBuffer(int imageIndex);
     void CreateGraphicsPipeline(const std::string& vertPath, const std::string& fragPath);
     VkShaderModule CreateShaderModule(const std::vector<char>& code);
 
@@ -87,10 +84,14 @@ private:
     std::vector<VkSemaphore> imageAvailableSemaphores;
     std::vector<VkSemaphore> renderFinishedSemaphores;
 
-    MECommandBuffer* commandBuffer;
-
     MEDevice& device;
     MEWindow& window;
+    MESwapchain& swapchain;
+
+
+    MECommandBuffer* commandBuffer;
+    void CraeteCommandBuffers();
+    void RecordCommandBuffer(int imageIndex);
 };
 
 }

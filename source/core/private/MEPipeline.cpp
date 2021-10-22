@@ -15,9 +15,6 @@
 #include <chrono>
 
 
-#define TINYOBJLOADER_IMPLEMENTATION
-#include <tiny_obj_loader.h>
-
 namespace MatchEngine
 {
 
@@ -31,16 +28,15 @@ MEPipeline::MEPipeline(MEDevice& device, MEWindow& window, MESwapchain& swapchai
     CreateDescriptorSetLayout();
     CreateGraphicsPipeline(vertPath,fragPath);
 
-    texture = new METexture(&device);
-    texture->CreateTexture(TEXTURE_PATH);
-
-    LoadModel();
-
     commandBuffer = new MECommandBuffer(device,device.GetCommandPool());
     CraeteCommandBuffers();
 
-    CreateVertexBuffer();
-    CreateIndexBuffer();
+    texture = new METexture(&device);
+    texture->CreateTexture(TEXTURE_PATH);
+
+    model = new MEModel(&device);
+    model->CreateModel(MODEL_PATH);
+
     CreateUniformBuffers();
     CreateDescriptorPool();
     CreateDescriptorSets();
@@ -53,14 +49,9 @@ MEPipeline::~MEPipeline()
     CleanupSwapChain();
 
     delete texture;
+    delete model;
 
     vkDestroyDescriptorSetLayout(device.GetDevice(),descSetLayout,nullptr);
-
-    vkDestroyBuffer(device.GetDevice(),vertexBuffer,nullptr);
-    vkFreeMemory(device.GetDevice(), vertexBufferMemory,nullptr);
-
-    vkDestroyBuffer(device.GetDevice(),indexBuffer,nullptr);
-    vkFreeMemory(device.GetDevice(), indexBufferMemory,nullptr);
 
     for(size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
     {
@@ -97,15 +88,12 @@ void MEPipeline::RecordCommandBuffer(int imageIndex)
 {
     auto cb = BindPipeline(imageIndex);
 
-    VkBuffer vertexBuffers[] = {vertexBuffer};
-    VkDeviceSize offsets[] = {0};
-    vkCmdBindVertexBuffers(cb,0,1,vertexBuffers,offsets);
-    vkCmdBindIndexBuffer(cb,indexBuffer,0,VK_INDEX_TYPE_UINT32);
+    model->BindModel(cb);
 
-    for(int i = 0; i < 3; ++i)
+    for(int i = 0; i < 2; ++i)
     {
         vkCmdBindDescriptorSets(cb,VK_PIPELINE_BIND_POINT_GRAPHICS,pipelineLayout,0,1,&descriptorSets[i],0,nullptr);
-        vkCmdDrawIndexed(cb, static_cast<uint32_t>(indices.size()),1,0,0,0);
+        vkCmdDrawIndexed(cb, model->GetIndicesSize(),1,0,0,0);
     }
     
     EndPipeline(cb);
@@ -297,20 +285,20 @@ void MEPipeline::EndPipeline(VkCommandBuffer& commandBuffer)
 
 void MEPipeline::CreateDescriptorSets()
 {
-    std::vector<VkDescriptorSetLayout> layouts(swapchain.GetSwapchainImagesSize(),descSetLayout);
+    std::vector<VkDescriptorSetLayout> layouts(2,descSetLayout);
     VkDescriptorSetAllocateInfo allocInfo{};
     allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
     allocInfo.descriptorPool = descriptorPool;
-    allocInfo.descriptorSetCount = static_cast<uint32_t>(swapchain.GetSwapchainImagesSize());
+    allocInfo.descriptorSetCount = static_cast<uint32_t>(2);
     allocInfo.pSetLayouts = layouts.data();
 
-    descriptorSets.resize(swapchain.GetSwapchainImagesSize());
+    descriptorSets.resize(2);
     if(vkAllocateDescriptorSets(device.GetDevice(),&allocInfo,descriptorSets.data()) != VK_SUCCESS)
     {
         throw std::runtime_error("failed to allocate descriptor sets");
     }
 
-    for(size_t i = 0; i < swapchain.GetSwapchainImagesSize(); ++i)
+    for(size_t i = 0; i < 2; ++i)
     {
         VkDescriptorBufferInfo bufferInfo{};
         bufferInfo.buffer = uniformBuffers[i];
@@ -353,15 +341,15 @@ void MEPipeline::CreateDescriptorPool()
 
     std::array<VkDescriptorPoolSize,2> poolSizes{};
     poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    poolSizes[0].descriptorCount = static_cast<uint32_t>(swapchain.GetSwapchainImagesSize());
+    poolSizes[0].descriptorCount = static_cast<uint32_t>(2);
     poolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    poolSizes[1].descriptorCount = static_cast<uint32_t>(swapchain.GetSwapchainImagesSize());
+    poolSizes[1].descriptorCount = static_cast<uint32_t>(2);
     
     VkDescriptorPoolCreateInfo poolInfo{};
     poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
     poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
     poolInfo.pPoolSizes = poolSizes.data();
-    poolInfo.maxSets = static_cast<uint32_t>(swapchain.GetSwapchainImagesSize());
+    poolInfo.maxSets = static_cast<uint32_t>(2);
 
     if(vkCreateDescriptorPool(device.GetDevice(),&poolInfo,nullptr,&descriptorPool) != VK_SUCCESS)
     {
@@ -403,70 +391,6 @@ void MEPipeline::CreateDescriptorSetLayout()
 
 }
 
-
-void MEPipeline::CopyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size)
-{
-    auto commandBuffer = device.GetCommandPool().BeginSingleTimeCommands();
-
-    VkBufferCopy copyRegion{};
-    copyRegion.srcOffset = 0;
-    copyRegion.dstOffset = 0;
-    copyRegion.size = size;
-    vkCmdCopyBuffer(commandBuffer,srcBuffer,dstBuffer,1,&copyRegion);
-
-    device.GetCommandPool().EndSingleTimeCommands(commandBuffer);
-
-}
-
-void MEPipeline::LoadModel()
-{
-    tinyobj::attrib_t attrib;
-    std::vector<tinyobj::shape_t> shapes;
-    std::vector<tinyobj::material_t> materials;
-    std::string err;
-
-    if(!tinyobj::LoadObj(&attrib,&shapes,&materials,&err,MODEL_PATH.c_str()))
-    {
-        throw std::runtime_error(err);
-    }
-
-    std::unordered_map<Vertex,uint32_t> uniqueVertices{};
-
-    for(const auto& shape : shapes)
-    {
-        for(const auto& index : shape.mesh.indices)
-        {
-            Vertex vertex{};
-
-            vertex.pos = 
-            {
-                attrib.vertices[3 * index.vertex_index + 0],
-                attrib.vertices[3 * index.vertex_index + 1],
-                attrib.vertices[3 * index.vertex_index + 2]
-            };
-
-            vertex.texCoord = 
-            {
-                attrib.texcoords[2 * index.texcoord_index + 0],
-                1.0f - attrib.texcoords[2 * index.texcoord_index + 1]
-            };
-
-            vertex.color = {1.0f,1.0f,1.0f};
-
-            if(uniqueVertices.count(vertex) == 0)
-            {
-                uniqueVertices[vertex] = static_cast<uint32_t>(vertices.size());
-                vertices.push_back(vertex);
-            }
-            
-            indices.push_back(uniqueVertices[vertex]);// indices.size());
-
-            // indices.push_back(indices.size());
-            // vertices.push_back(vertex);
-        }
-    }
-}
-
 void MEPipeline::CreateUniformBuffers()
 {
     VkDeviceSize bufferSize = sizeof(UniformBufferObject);
@@ -480,52 +404,6 @@ void MEPipeline::CreateUniformBuffers()
                                                             VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, uniformBuffers[i],uniformBuffersMemory[i]);
 
     }
-}
-
-void MEPipeline::CreateIndexBuffer()
-{
-    VkDeviceSize bufferSize = sizeof(indices[0]) * indices.size();
-
-    VkBuffer stagingBuffer;
-    VkDeviceMemory stagingBufferMemory;
-    device.CreateBuffer(bufferSize,VK_BUFFER_USAGE_TRANSFER_SRC_BIT,VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-                            VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
-
-    void* data;
-    vkMapMemory(device.GetDevice(),stagingBufferMemory,0,bufferSize,0,&data);
-    memcpy(data,indices.data(),(size_t)bufferSize);
-    vkUnmapMemory(device.GetDevice(),stagingBufferMemory);
-
-    device.CreateBuffer(bufferSize,VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-                            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, indexBuffer,indexBufferMemory);
-
-    CopyBuffer(stagingBuffer,indexBuffer,bufferSize);
-
-    vkDestroyBuffer(device.GetDevice(),stagingBuffer,nullptr);
-    vkFreeMemory(device.GetDevice(),stagingBufferMemory,nullptr);
-}
-
-void MEPipeline::CreateVertexBuffer()
-{
-    VkDeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
-
-    VkBuffer stagingBuffer;
-    VkDeviceMemory stagingBufferMemory;
-    device.CreateBuffer(bufferSize,VK_BUFFER_USAGE_TRANSFER_SRC_BIT,VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-                            VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
-
-    void* data;
-    vkMapMemory(device.GetDevice(),stagingBufferMemory,0,bufferSize,0,&data);
-    memcpy(data,vertices.data(),(size_t)bufferSize);
-    vkUnmapMemory(device.GetDevice(),stagingBufferMemory);
-
-    device.CreateBuffer(bufferSize,VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-                            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, vertexBuffer,vertexBufferMemory);
-
-    CopyBuffer(stagingBuffer,vertexBuffer,bufferSize);
-
-    vkDestroyBuffer(device.GetDevice(),stagingBuffer,nullptr);
-    vkFreeMemory(device.GetDevice(),stagingBufferMemory,nullptr);
 }
 
 void MEPipeline::CreateSyncObjects()

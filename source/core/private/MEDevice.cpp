@@ -718,6 +718,20 @@ void MEDevice::CreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemor
     vkBindBufferMemory(device,buffer,bufferMemory,0);
 }
 
+void MEDevice::CopyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size)
+{
+    auto commandBuffer = commandPool->BeginSingleTimeCommands();
+
+    VkBufferCopy copyRegion{};
+    copyRegion.srcOffset = 0;
+    copyRegion.dstOffset = 0;
+    copyRegion.size = size;
+    vkCmdCopyBuffer(commandBuffer,srcBuffer,dstBuffer,1,&copyRegion);
+
+    commandPool->EndSingleTimeCommands(commandBuffer);
+
+}
+
 void MEDevice::SetupDebugMessenger()
 {
 #ifndef _DEBUG

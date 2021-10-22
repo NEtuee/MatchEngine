@@ -8,6 +8,7 @@
 #include "../Vertex.hpp"
 #include "MESwapchain.hpp"
 #include "METexture.hpp"
+#include "MEModel.hpp"
 
 
 namespace MatchEngine
@@ -39,13 +40,7 @@ private:
     void CreateDescriptorPool();
     void CreateDescriptorSetLayout();
 
-    void CopyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size);
-
-    void LoadModel();
-
     void CreateUniformBuffers();
-    void CreateIndexBuffer();
-    void CreateVertexBuffer();
     void CreateSyncObjects();
     void CreateGraphicsPipeline(const std::string& vertPath, const std::string& fragPath);
     VkShaderModule CreateShaderModule(const std::vector<char>& code);
@@ -57,14 +52,6 @@ private:
     std::vector<VkDescriptorSet> descriptorSets;
 
     VkDescriptorSetLayout descSetLayout;
-
-    std::vector<Vertex> vertices;
-    std::vector<uint32_t> indices;
-
-    VkBuffer vertexBuffer;
-    VkDeviceMemory vertexBufferMemory;
-    VkBuffer indexBuffer;
-    VkDeviceMemory indexBufferMemory;
 
     std::vector<VkBuffer> uniformBuffers;
     std::vector<VkDeviceMemory> uniformBuffersMemory;
@@ -87,6 +74,7 @@ private:
     MESwapchain& swapchain;
 
     METexture* texture;
+    MEModel* model;
 
     MECommandBuffer* commandBuffer;
     void CraeteCommandBuffers();

@@ -34,6 +34,9 @@ MEPipeline::MEPipeline(MEDevice& device, MEWindow& window, MESwapchain& swapchai
     texture = new METexture(&device);
     texture->CreateTexture(TEXTURE_PATH);
 
+    newImage = new METexture(&device);
+    newImage->CreateTexture("../Textures/testImage.png");
+
     model = new MEModel(&device);
     model->CreateModel(MODEL_PATH);
 
@@ -49,6 +52,7 @@ MEPipeline::~MEPipeline()
     CleanupSwapChain();
 
     delete texture;
+    delete newImage;
     delete model;
 
     vkDestroyDescriptorSetLayout(device.GetDevice(),descSetLayout,nullptr);
@@ -90,25 +94,43 @@ void MEPipeline::RecordCommandBuffer(int imageIndex)
 
     model->BindModel(cb);
 
-    for(int i = 0; i < 2; ++i)
-    {
-        vkCmdBindDescriptorSets(cb,VK_PIPELINE_BIND_POINT_GRAPHICS,pipelineLayout,0,1,&descriptorSets[i],0,nullptr);
-        vkCmdDrawIndexed(cb, model->GetIndicesSize(),1,0,0,0);
-    }
+    vkCmdBindDescriptorSets(cb,VK_PIPELINE_BIND_POINT_GRAPHICS,pipelineLayout,0,1,&descriptorSets[0],0,nullptr);
+
+    
+    static auto startTime = std::chrono::high_resolution_clock::now();
+    auto currentTime = std::chrono::high_resolution_clock::now();
+
+    float time = std::chrono::duration<float,std::chrono::seconds::period>(currentTime - startTime).count();
+
+    UniformBufferObject ubo{};
+    auto extend = swapchain.GetSwapchainExtent();
+    ubo.model = glm::translate(glm::mat4(1.0f),glm::vec3(0.f)) * glm::rotate(glm::mat4(1.0f),time * glm::radians(90.0f),glm::vec3(.0f,.0f,1.0f));
+    ubo.view = glm::lookAt(glm::vec3(2.0f,2.0f,2.0f),glm::vec3(0.f,0.f,0.f),glm::vec3(0.f,0.f,1.0f));
+    ubo.proj = glm::perspective(glm::radians(45.0f),extend.width / (float)extend.height,0.1f,10.f);
+    ubo.proj[1][1] *= -1;
+
+
+    vkCmdPushConstants(cb,pipelineLayout,VK_SHADER_STAGE_VERTEX_BIT,0,sizeof(UniformBufferObject),&ubo);
+    vkCmdDrawIndexed(cb, model->GetIndicesSize(),1,0,0,0);
+
+    UniformBufferObject ubo2{};
+
+    ubo2.model = glm::translate(glm::mat4(1.0f),glm::vec3(2.f,0.f,0.f)) * glm::rotate(glm::mat4(1.0f),time * glm::radians(45.0f),glm::vec3(.0f,.0f,1.0f));
+    ubo2.view = glm::lookAt(glm::vec3(2.0f,2.0f,2.0f),glm::vec3(0.f,0.f,0.f),glm::vec3(0.f,0.f,1.0f));
+    ubo2.proj = glm::perspective(glm::radians(45.0f),extend.width / (float)extend.height,0.1f,10.f);
+    ubo2.proj[1][1] *= -1;
+
+
+    vkCmdPushConstants(cb,pipelineLayout,VK_SHADER_STAGE_VERTEX_BIT,0,sizeof(UniformBufferObject),&ubo2);
+    vkCmdDrawIndexed(cb, model->GetIndicesSize(),1,0,0,0);
+
+    // for(int i = 0; i < 2; ++i)
+    // {
+    //     vkCmdBindDescriptorSets(cb,VK_PIPELINE_BIND_POINT_GRAPHICS,pipelineLayout,0,1,&descriptorSets[i],0,nullptr);
+    //     vkCmdDrawIndexed(cb, model->GetIndicesSize(),1,0,0,0);
+    // }
     
     EndPipeline(cb);
-}
-
-
-void MEPipeline::DrawFrame()
-{
-    auto imageIndex = BeginRender();
-
-    UpdateUniformBuffer(imageIndex,0.3f);
-    RecordCommandBuffer(imageIndex);
-
-    EndRender(imageIndex);
-
 }
 
 void MEPipeline::UpdateUniformBuffer(uint32_t currentImage,float plus)
@@ -118,16 +140,18 @@ void MEPipeline::UpdateUniformBuffer(uint32_t currentImage,float plus)
 
     float time = std::chrono::duration<float,std::chrono::seconds::period>(currentTime - startTime).count();
 
-    UniformBufferObject ubo{};
-    auto extend = swapchain.GetSwapchainExtent();
-    ubo.model = glm::translate(glm::mat4(1.0f),glm::vec3(((float)currentImage) * plus,0.f,((float)currentImage) * plus)) * glm::rotate(glm::mat4(1.0f),time * glm::radians(90.0f),glm::vec3(.0f,.0f,1.0f));
-    ubo.view = glm::lookAt(glm::vec3(2.0f,2.0f,2.0f),glm::vec3(0.f,0.f,0.f),glm::vec3(0.f,0.f,1.0f));
-    ubo.proj = glm::perspective(glm::radians(45.0f),extend.width / (float)extend.height,0.1f,10.f);
-    ubo.proj[1][1] *= -1;
+    // UniformBufferObject ubo{};
+    // auto extend = swapchain.GetSwapchainExtent();
+    // ubo.model = glm::rotate(glm::mat4(1.0f),time * glm::radians(90.0f),glm::vec3(.0f,.0f,1.0f));
+    // ubo.view = glm::lookAt(glm::vec3(2.0f,2.0f,2.0f),glm::vec3(0.f,0.f,0.f),glm::vec3(0.f,0.f,1.0f));
+    // ubo.proj = glm::perspective(glm::radians(45.0f),extend.width / (float)extend.height,0.1f,10.f);
+    // ubo.proj[1][1] *= -1;
+
+    VkSampler sampler = newImage->GetSampler();
 
     void* data;
-    vkMapMemory(device.GetDevice(), uniformBuffersMemory[currentImage],0,sizeof(ubo),0,&data);
-    memcpy(data,&ubo,sizeof(ubo));
+    vkMapMemory(device.GetDevice(), uniformBuffersMemory[currentImage],0,sizeof(sampler),0,&data);
+    memcpy(data,&sampler,sizeof(sampler));
     vkUnmapMemory(device.GetDevice(), uniformBuffersMemory[currentImage]);
 }
 
@@ -310,23 +334,23 @@ void MEPipeline::CreateDescriptorSets()
         imageInfo.imageView = texture->GetImageView();
         imageInfo.sampler = texture->GetSampler();
 
-        std::array<VkWriteDescriptorSet,2> descriptorWrites{};
+        std::array<VkWriteDescriptorSet,1> descriptorWrites{};
+
+        // descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        // descriptorWrites[0].dstSet = descriptorSets[i];
+        // descriptorWrites[0].dstBinding = 0;
+        // descriptorWrites[0].dstArrayElement = 0;
+        // descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        // descriptorWrites[0].descriptorCount = 1;
+        // descriptorWrites[0].pBufferInfo = &bufferInfo;
 
         descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
         descriptorWrites[0].dstSet = descriptorSets[i];
         descriptorWrites[0].dstBinding = 0;
         descriptorWrites[0].dstArrayElement = 0;
-        descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
         descriptorWrites[0].descriptorCount = 1;
-        descriptorWrites[0].pBufferInfo = &bufferInfo;
-
-        descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        descriptorWrites[1].dstSet = descriptorSets[i];
-        descriptorWrites[1].dstBinding = 1;
-        descriptorWrites[1].dstArrayElement = 0;
-        descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        descriptorWrites[1].descriptorCount = 1;
-        descriptorWrites[1].pImageInfo = &imageInfo;
+        descriptorWrites[0].pImageInfo = &imageInfo;
 
 
         vkUpdateDescriptorSets(device.GetDevice(),static_cast<uint32_t>(descriptorWrites.size()),descriptorWrites.data(),0,nullptr);
@@ -339,11 +363,11 @@ void MEPipeline::CreateDescriptorPool()
     // poolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     // poolSize.descriptorCount = static_cast<uint32_t>(device.GetSwapChainImages().size());
 
-    std::array<VkDescriptorPoolSize,2> poolSizes{};
-    poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    std::array<VkDescriptorPoolSize,1> poolSizes{};
+    // poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    // poolSizes[0].descriptorCount = static_cast<uint32_t>(2);
+    poolSizes[0].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     poolSizes[0].descriptorCount = static_cast<uint32_t>(2);
-    poolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    poolSizes[1].descriptorCount = static_cast<uint32_t>(2);
     
     VkDescriptorPoolCreateInfo poolInfo{};
     poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
@@ -359,21 +383,21 @@ void MEPipeline::CreateDescriptorPool()
 
 void MEPipeline::CreateDescriptorSetLayout()
 {
-    VkDescriptorSetLayoutBinding uboLayoutBinding{};
-    uboLayoutBinding.binding = 0;
-    uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    uboLayoutBinding.descriptorCount = 1;
-    uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-    uboLayoutBinding.pImmutableSamplers = nullptr;
+    // VkDescriptorSetLayoutBinding uboLayoutBinding{};
+    // uboLayoutBinding.binding = 0;
+    // uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    // uboLayoutBinding.descriptorCount = 1;
+    // uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    // uboLayoutBinding.pImmutableSamplers = nullptr;
 
     VkDescriptorSetLayoutBinding samplerLayoutBinding{};
-    samplerLayoutBinding.binding = 1;
+    samplerLayoutBinding.binding = 0;
     samplerLayoutBinding.descriptorCount = 1;
     samplerLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     samplerLayoutBinding.pImmutableSamplers = nullptr;
     samplerLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
-    std::array<VkDescriptorSetLayoutBinding,2> bindings = {uboLayoutBinding, samplerLayoutBinding};
+    std::array<VkDescriptorSetLayoutBinding,1> bindings = { samplerLayoutBinding};//{uboLayoutBinding, samplerLayoutBinding};
     VkDescriptorSetLayoutCreateInfo layoutInfo{};
     layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
     layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
@@ -539,11 +563,17 @@ void MEPipeline::CreateGraphicsPipeline(const std::string& vertPath, const std::
     depthStencil.depthBoundsTestEnable = VK_FALSE;
     depthStencil.stencilTestEnable = VK_FALSE;
 
+    VkPushConstantRange pushConstant;
+	pushConstant.offset = 0;
+	pushConstant.size = sizeof(UniformBufferObject);
+	pushConstant.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+
     VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
     pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     pipelineLayoutInfo.setLayoutCount = 1;
     pipelineLayoutInfo.pSetLayouts = &descSetLayout;
-    pipelineLayoutInfo.pushConstantRangeCount = 0;
+    pipelineLayoutInfo.pPushConstantRanges = &pushConstant;
+    pipelineLayoutInfo.pushConstantRangeCount = 1;
 
     if (vkCreatePipelineLayout(device.GetDevice(), &pipelineLayoutInfo, nullptr, &pipelineLayout) != VK_SUCCESS) {
         throw std::runtime_error("failed to create pipeline layout!");

@@ -21,7 +21,6 @@ public:
     MEPipeline(MEDevice& device, MEWindow& window, MESwapchain& swapchain, const std::string& vertPath, const std::string& fragPath);
     ~MEPipeline();
 
-    void DrawFrame();
     void UpdateUniformBuffer(uint32_t currentImage,float plus);
     void RecreateSwapChain();
     void CleanupSwapChain();
@@ -74,6 +73,7 @@ private:
     MESwapchain& swapchain;
 
     METexture* texture;
+    METexture* newImage;
     MEModel* model;
 
     MECommandBuffer* commandBuffer;

@@ -197,7 +197,8 @@ void MEPipeline::CleanupSwapChain()
         vkFreeMemory(device.GetDevice(),uniformBuffersMemory[i],nullptr);
     }
 
-    vkDestroyDescriptorPool(device.GetDevice(),descriptorPool, nullptr);
+    descriptorPool->DestroyDescriptorPool();
+    //vkDestroyDescriptorPool(device.GetDevice(),descriptorPool, nullptr);
 }
 
 uint32_t MEPipeline::BeginRender()
@@ -309,52 +310,52 @@ void MEPipeline::EndPipeline(VkCommandBuffer& commandBuffer)
 
 void MEPipeline::CreateDescriptorSets()
 {
-    std::vector<VkDescriptorSetLayout> layouts(2,descSetLayout);
-    VkDescriptorSetAllocateInfo allocInfo{};
-    allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-    allocInfo.descriptorPool = descriptorPool;
-    allocInfo.descriptorSetCount = static_cast<uint32_t>(2);
-    allocInfo.pSetLayouts = layouts.data();
+    // std::vector<VkDescriptorSetLayout> layouts(2,descSetLayout);
+    // VkDescriptorSetAllocateInfo allocInfo{};
+    // allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    // allocInfo.descriptorPool = descriptorPool;
+    // allocInfo.descriptorSetCount = static_cast<uint32_t>(2);
+    // allocInfo.pSetLayouts = layouts.data();
 
-    descriptorSets.resize(2);
-    if(vkAllocateDescriptorSets(device.GetDevice(),&allocInfo,descriptorSets.data()) != VK_SUCCESS)
-    {
-        throw std::runtime_error("failed to allocate descriptor sets");
-    }
+    // descriptorSets.resize(2);
+    // if(vkAllocateDescriptorSets(device.GetDevice(),&allocInfo,descriptorSets.data()) != VK_SUCCESS)
+    // {
+    //     throw std::runtime_error("failed to allocate descriptor sets");
+    // }
 
-    for(size_t i = 0; i < 2; ++i)
-    {
-        VkDescriptorBufferInfo bufferInfo{};
-        bufferInfo.buffer = uniformBuffers[i];
-        bufferInfo.offset = 0;
-        bufferInfo.range = sizeof(UniformBufferObject);
+    descriptorSets.resize(1);
+    descriptorPool->AllocateDescriptorSet(descSetLayout,descriptorSets.data());
 
-        VkDescriptorImageInfo imageInfo{};
-        imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        imageInfo.imageView = texture->GetImageView();
-        imageInfo.sampler = texture->GetSampler();
+    VkDescriptorBufferInfo bufferInfo{};
+    bufferInfo.buffer = uniformBuffers[0];
+    bufferInfo.offset = 0;
+    bufferInfo.range = sizeof(UniformBufferObject);
 
-        std::array<VkWriteDescriptorSet,1> descriptorWrites{};
+    VkDescriptorImageInfo imageInfo{};
+    imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    imageInfo.imageView = texture->GetImageView();
+    imageInfo.sampler = texture->GetSampler();
 
-        // descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        // descriptorWrites[0].dstSet = descriptorSets[i];
-        // descriptorWrites[0].dstBinding = 0;
-        // descriptorWrites[0].dstArrayElement = 0;
-        // descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        // descriptorWrites[0].descriptorCount = 1;
-        // descriptorWrites[0].pBufferInfo = &bufferInfo;
+    std::array<VkWriteDescriptorSet,1> descriptorWrites{};
 
-        descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        descriptorWrites[0].dstSet = descriptorSets[i];
-        descriptorWrites[0].dstBinding = 0;
-        descriptorWrites[0].dstArrayElement = 0;
-        descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        descriptorWrites[0].descriptorCount = 1;
-        descriptorWrites[0].pImageInfo = &imageInfo;
+    // descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    // descriptorWrites[0].dstSet = descriptorSets[i];
+    // descriptorWrites[0].dstBinding = 0;
+    // descriptorWrites[0].dstArrayElement = 0;
+    // descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    // descriptorWrites[0].descriptorCount = 1;
+    // descriptorWrites[0].pBufferInfo = &bufferInfo;
+
+    descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    descriptorWrites[0].dstSet = descriptorSets[0];
+    descriptorWrites[0].dstBinding = 0;
+    descriptorWrites[0].dstArrayElement = 0;
+    descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    descriptorWrites[0].descriptorCount = 1;
+    descriptorWrites[0].pImageInfo = &imageInfo;
 
 
-        vkUpdateDescriptorSets(device.GetDevice(),static_cast<uint32_t>(descriptorWrites.size()),descriptorWrites.data(),0,nullptr);
-    }
+    vkUpdateDescriptorSets(device.GetDevice(),static_cast<uint32_t>(descriptorWrites.size()),descriptorWrites.data(),0,nullptr);
 }
 
 void MEPipeline::CreateDescriptorPool()
@@ -363,22 +364,26 @@ void MEPipeline::CreateDescriptorPool()
     // poolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     // poolSize.descriptorCount = static_cast<uint32_t>(device.GetSwapChainImages().size());
 
-    std::array<VkDescriptorPoolSize,1> poolSizes{};
-    // poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    // std::array<VkDescriptorPoolSize,1> poolSizes{};
+    // // poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    // // poolSizes[0].descriptorCount = static_cast<uint32_t>(2);
+    // poolSizes[0].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     // poolSizes[0].descriptorCount = static_cast<uint32_t>(2);
-    poolSizes[0].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    poolSizes[0].descriptorCount = static_cast<uint32_t>(2);
     
-    VkDescriptorPoolCreateInfo poolInfo{};
-    poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-    poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
-    poolInfo.pPoolSizes = poolSizes.data();
-    poolInfo.maxSets = static_cast<uint32_t>(2);
+    // VkDescriptorPoolCreateInfo poolInfo{};
+    // poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    // poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
+    // poolInfo.pPoolSizes = poolSizes.data();
+    // poolInfo.maxSets = static_cast<uint32_t>(2);
 
-    if(vkCreateDescriptorPool(device.GetDevice(),&poolInfo,nullptr,&descriptorPool) != VK_SUCCESS)
-    {
-        throw std::runtime_error("failed to create descriptor pool");
-    }
+    // if(vkCreateDescriptorPool(device.GetDevice(),&poolInfo,nullptr,&descriptorPool->GetDescriptorPool()) != VK_SUCCESS)
+    // {
+    //     throw std::runtime_error("failed to create descriptor pool");
+    // }
+
+    descriptorPool = MEDescriptorPool::Builder(device)
+        .AddPoolSize(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,static_cast<uint32_t>(2))
+        .Build();
 }
 
 void MEPipeline::CreateDescriptorSetLayout()

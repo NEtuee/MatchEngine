@@ -9,6 +9,7 @@
 #include "MESwapchain.hpp"
 #include "METexture.hpp"
 #include "MEModel.hpp"
+#include "MEDescriptorPool.hpp"
 
 
 namespace MatchEngine
@@ -47,7 +48,6 @@ private:
     uint32_t mipLevels;
     
 
-    VkDescriptorPool descriptorPool;
     std::vector<VkDescriptorSet> descriptorSets;
 
     VkDescriptorSetLayout descSetLayout;
@@ -72,6 +72,7 @@ private:
     MEWindow& window;
     MESwapchain& swapchain;
 
+    MEDescriptorPool* descriptorPool;
     METexture* texture;
     METexture* newImage;
     MEModel* model;

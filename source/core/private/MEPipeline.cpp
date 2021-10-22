@@ -1,5 +1,5 @@
-#include "MEPipeline.hpp"
-#include "UniformBufferObject.hpp"
+#include "../public/MEPipeline.hpp"
+#include "../UniformBufferObject.hpp"
 
 #include <fstream>
 #include <stdexcept>
@@ -14,9 +14,6 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <chrono>
 
-#define STB_IMAGE_IMPLEMENTAION
-#include <stb_image.h>
-#include <deprecated/stb_image.c>
 
 #define TINYOBJLOADER_IMPLEMENTATION
 #include <tiny_obj_loader.h>
@@ -33,9 +30,9 @@ MEPipeline::MEPipeline(MEDevice& device, MEWindow& window, MESwapchain& swapchai
 {
     CreateDescriptorSetLayout();
     CreateGraphicsPipeline(vertPath,fragPath);
-    CreateTextureImage();
-    CreateTextureImageView();
-    CreateTextureSampler();
+
+    texture = new METexture(&device);
+    texture->CreateTexture(TEXTURE_PATH);
 
     LoadModel();
 
@@ -55,11 +52,7 @@ MEPipeline::~MEPipeline()
 {
     CleanupSwapChain();
 
-    vkDestroySampler(device.GetDevice(),textureSampler,nullptr);
-    vkDestroyImageView(device.GetDevice(),textureImageView,nullptr);
-
-    vkDestroyImage(device.GetDevice(),textureImage,nullptr);
-    vkFreeMemory(device.GetDevice(),textureImageMemory, nullptr);
+    delete texture;
 
     vkDestroyDescriptorSetLayout(device.GetDevice(),descSetLayout,nullptr);
 
@@ -102,129 +95,32 @@ std::vector<char> MEPipeline::ReadFile(const std::string & path)
 
 void MEPipeline::RecordCommandBuffer(int imageIndex)
 {
-    VkCommandBufferBeginInfo beginInfo{};
-    beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-
-    if(vkBeginCommandBuffer(commandBuffer->GetCommandBuffer(imageIndex),&beginInfo) != VK_SUCCESS)
-    {
-        throw std::runtime_error("failed to begin recording command buffer");
-    }
-
-    VkRenderPassBeginInfo renderPassInfo{};
-    renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-    renderPassInfo.renderPass = swapchain.GetRenderPass();
-    renderPassInfo.framebuffer = swapchain.GetSwapchainFrameBuffer()[imageIndex];
-
-    renderPassInfo.renderArea.offset = {0,0};
-    renderPassInfo.renderArea.extent = swapchain.GetSwapchainExtent();
-
-    std::array<VkClearValue,2> clearValues{};
-    //VkClearValue clearColor = {{{0.0f,0.0f,0.0f,1.0f}}};
-    clearValues[0].color = {{0.0f,0.0f,0.0f,1.0f}};
-    clearValues[1].depthStencil = {1.0f, 0};
-
-    renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
-    renderPassInfo.pClearValues = clearValues.data();
-
-    vkCmdBeginRenderPass(commandBuffer->GetCommandBuffer(imageIndex),&renderPassInfo,VK_SUBPASS_CONTENTS_INLINE);
-    vkCmdBindPipeline(commandBuffer->GetCommandBuffer(imageIndex),VK_PIPELINE_BIND_POINT_GRAPHICS,graphicsPipeline);
+    auto cb = BindPipeline(imageIndex);
 
     VkBuffer vertexBuffers[] = {vertexBuffer};
     VkDeviceSize offsets[] = {0};
-    vkCmdBindVertexBuffers(commandBuffer->GetCommandBuffer(imageIndex),0,1,vertexBuffers,offsets);
-    vkCmdBindIndexBuffer(commandBuffer->GetCommandBuffer(imageIndex),indexBuffer,0,VK_INDEX_TYPE_UINT32);
+    vkCmdBindVertexBuffers(cb,0,1,vertexBuffers,offsets);
+    vkCmdBindIndexBuffer(cb,indexBuffer,0,VK_INDEX_TYPE_UINT32);
 
     for(int i = 0; i < 3; ++i)
     {
-        vkCmdBindDescriptorSets(commandBuffer->GetCommandBuffer(imageIndex),VK_PIPELINE_BIND_POINT_GRAPHICS,pipelineLayout,0,1,&descriptorSets[i],0,nullptr);
-        vkCmdDrawIndexed(commandBuffer->GetCommandBuffer(imageIndex), static_cast<uint32_t>(indices.size()),1,0,0,0);
+        vkCmdBindDescriptorSets(cb,VK_PIPELINE_BIND_POINT_GRAPHICS,pipelineLayout,0,1,&descriptorSets[i],0,nullptr);
+        vkCmdDrawIndexed(cb, static_cast<uint32_t>(indices.size()),1,0,0,0);
     }
     
-
-    vkCmdEndRenderPass(commandBuffer->GetCommandBuffer(imageIndex));
-    if(vkEndCommandBuffer(commandBuffer->GetCommandBuffer(imageIndex)) != VK_SUCCESS)
-    {
-        throw std::runtime_error("failed to record command buffer");
-    }
+    EndPipeline(cb);
 }
 
 
 void MEPipeline::DrawFrame()
 {
-    vkWaitForFences(device.GetDevice(),1,&inFlightFences[currentFrame],VK_TRUE,UINT64_MAX);
-    //vkResetFences(device.GetDevice(),1,&inFlightFences[currentFrame]);
+    auto imageIndex = BeginRender();
 
-    uint32_t imageIndex;
-    auto result = vkAcquireNextImageKHR(device.GetDevice(), swapchain.GetSwapchain(),UINT64_MAX,imageAvailableSemaphores[currentFrame],VK_NULL_HANDLE, &imageIndex);
-
-    if(result == VK_ERROR_OUT_OF_DATE_KHR)
-    {
-        RecreateSwapChain();
-        return;
-    }
-    else if(result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR)
-    {
-        throw std::runtime_error("failed to acquire swap chain image");
-    }
-
-    if(imagesInFlight[imageIndex] != VK_NULL_HANDLE)
-    {
-        vkWaitForFences(device.GetDevice(),1,&imagesInFlight[imageIndex],VK_TRUE,UINT64_MAX);
-    }
-
-    imagesInFlight[imageIndex] = inFlightFences[currentFrame];
-
-    std::cout << imageIndex << "\n";
     UpdateUniformBuffer(imageIndex,0.3f);
     RecordCommandBuffer(imageIndex);
 
-    VkSubmitInfo submitInfo{};
-    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    EndRender(imageIndex);
 
-    VkSemaphore waitSemaphores[] = {imageAvailableSemaphores[currentFrame]};
-    VkPipelineStageFlags waitStages[] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
-    submitInfo.waitSemaphoreCount = 1;
-    submitInfo.pWaitSemaphores = waitSemaphores;
-    submitInfo.pWaitDstStageMask = waitStages;
-    
-    submitInfo.commandBufferCount = 1;
-    submitInfo.pCommandBuffers = &commandBuffer->GetCommandBuffer(imageIndex);
-
-    VkSemaphore signalSemaphores[] = {renderFinishedSemaphores[currentFrame]};
-    submitInfo.signalSemaphoreCount = 1;
-    submitInfo.pSignalSemaphores = signalSemaphores;
-
-    vkResetFences(device.GetDevice(),1,&inFlightFences[currentFrame]);
-
-    if(vkQueueSubmit(device.GetGraphicsQueue(),1,&submitInfo,inFlightFences[currentFrame]) != VK_SUCCESS)
-    {
-        throw std::runtime_error("failed to submit draw command buffer");
-    }
-
-    VkPresentInfoKHR presentInfo{};
-    presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-    presentInfo.waitSemaphoreCount = 1;
-    presentInfo.pWaitSemaphores = signalSemaphores;
-
-    VkSwapchainKHR swapChains[] = {swapchain.GetSwapchain()};
-    presentInfo.swapchainCount = 1;
-    presentInfo.pSwapchains = swapChains;
-    presentInfo.pImageIndices = &imageIndex;
-    presentInfo.pResults = nullptr;
-
-    result = vkQueuePresentKHR(device.GetPresentQueue(),&presentInfo);
-
-    if(result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || window.framebufferResized)
-    {
-        window.framebufferResized = false;
-        RecreateSwapChain();
-    }
-    else if(result != VK_SUCCESS)
-    {
-        throw std::runtime_error("failed to present swap chain image");
-    }
-
-    currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
 }
 
 void MEPipeline::UpdateUniformBuffer(uint32_t currentImage,float plus)
@@ -292,201 +188,111 @@ void MEPipeline::CleanupSwapChain()
     vkDestroyDescriptorPool(device.GetDevice(),descriptorPool, nullptr);
 }
 
-void MEPipeline::GenerateMipmaps(VkImage image,VkFormat imageFormat, int32_t texWidth, int32_t texHeight, uint32_t mipLevels)
+uint32_t MEPipeline::BeginRender()
 {
-    VkFormatProperties formatProperties;
-    vkGetPhysicalDeviceFormatProperties(device.GetPhysicalDevice(),imageFormat, &formatProperties);
+    vkWaitForFences(device.GetDevice(),1,&inFlightFences[currentFrame],VK_TRUE,UINT64_MAX);
+    //vkResetFences(device.GetDevice(),1,&inFlightFences[currentFrame]);
 
-    if(!(formatProperties.optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT))
+    uint32_t imageIndex;
+    auto result = vkAcquireNextImageKHR(device.GetDevice(), swapchain.GetSwapchain(),UINT64_MAX,imageAvailableSemaphores[currentFrame],VK_NULL_HANDLE, &imageIndex);
+
+    if(result == VK_ERROR_OUT_OF_DATE_KHR)
     {
-        throw std::runtime_error("texture image format does not support linear blitting");
+        RecreateSwapChain();
+        return imageIndex;
+    }
+    else if(result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR)
+    {
+        throw std::runtime_error("failed to acquire swap chain image");
     }
 
-    VkCommandBuffer commandBuffer = device.GetCommandPool().BeginSingleTimeCommands();
-
-    VkImageMemoryBarrier barrier{};
-    barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-    barrier.image = image;
-    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    barrier.subresourceRange.baseArrayLayer = 0;
-    barrier.subresourceRange.layerCount = 1;
-    barrier.subresourceRange.levelCount = 1;
-
-    int32_t mipWidth = texWidth;
-    int32_t mipHeight = texHeight;
-
-    for(uint32_t i = 1; i < mipLevels; ++i)
+    if(imagesInFlight[imageIndex] != VK_NULL_HANDLE)
     {
-        barrier.subresourceRange.baseMipLevel = i - 1;
-        barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-        barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-        barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-        barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-
-        vkCmdPipelineBarrier(commandBuffer,
-            VK_PIPELINE_STAGE_TRANSFER_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT,0,
-            0, nullptr,
-            0, nullptr,
-            1, &barrier);
-        
-        VkImageBlit blit{};
-        blit.srcOffsets[0] = {0,0,0};
-        blit.srcOffsets[1] = {mipWidth,mipHeight,1};
-        blit.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        blit.srcSubresource.mipLevel = i - 1;
-        blit.srcSubresource.baseArrayLayer = 0;
-        blit.srcSubresource.layerCount = 1;
-        blit.dstOffsets[0] = {0,0,0};
-        blit.dstOffsets[1] = {mipWidth > 1 ? mipWidth / 2 : 1, mipHeight > 1 ? mipHeight / 2 : 1,1};
-        blit.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        blit.dstSubresource.mipLevel = i;
-        blit.dstSubresource.baseArrayLayer = 0;
-        blit.dstSubresource.layerCount = 1;
-
-        vkCmdBlitImage(commandBuffer,
-            image,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-            image,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-            1, &blit,
-            VK_FILTER_LINEAR);
-
-        barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-        barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        barrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-        barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-
-        vkCmdPipelineBarrier(commandBuffer,
-            VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,0,
-            0, nullptr,
-            0, nullptr,
-            1, &barrier);
-        
-        if(mipWidth > 1) mipWidth /= 2;
-        if(mipHeight > 1) mipHeight /= 2;
+        vkWaitForFences(device.GetDevice(),1,&imagesInFlight[imageIndex],VK_TRUE,UINT64_MAX);
     }
 
-    barrier.subresourceRange.baseMipLevel = mipLevels - 1;
-    barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-    barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-    barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+    imagesInFlight[imageIndex] = inFlightFences[currentFrame];
 
-    vkCmdPipelineBarrier(commandBuffer,
-        VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0,
-        0, nullptr,
-        0, nullptr,
-        1, &barrier);
-
-    device.GetCommandPool().EndSingleTimeCommands(commandBuffer);
+    return imageIndex;
 }
 
-void MEPipeline::CopyBufferToImage(VkBuffer buffer,VkImage image, uint32_t width, uint32_t height)
+void MEPipeline::EndRender(uint32_t imageIndex)
 {
-    VkCommandBuffer commandBuffer = device.GetCommandPool().BeginSingleTimeCommands();
+    VkSubmitInfo submitInfo{};
+    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 
-    VkBufferImageCopy region{};
-    region.bufferOffset = 0;
-    region.bufferRowLength = 0;
-    region.bufferImageHeight = 0;
+    VkSemaphore waitSemaphores[] = {imageAvailableSemaphores[currentFrame]};
+    VkPipelineStageFlags waitStages[] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
+    submitInfo.waitSemaphoreCount = 1;
+    submitInfo.pWaitSemaphores = waitSemaphores;
+    submitInfo.pWaitDstStageMask = waitStages;
+    
+    submitInfo.commandBufferCount = 1;
+    submitInfo.pCommandBuffers = &commandBuffer->GetCommandBuffer(imageIndex);
 
-    region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    region.imageSubresource.mipLevel = 0;
-    region.imageSubresource.baseArrayLayer = 0;
-    region.imageSubresource.layerCount = 1;
+    VkSemaphore signalSemaphores[] = {renderFinishedSemaphores[currentFrame]};
+    submitInfo.signalSemaphoreCount = 1;
+    submitInfo.pSignalSemaphores = signalSemaphores;
 
-    region.imageOffset = {0,0,0};
-    region.imageExtent = 
+    vkResetFences(device.GetDevice(),1,&inFlightFences[currentFrame]);
+
+    if(vkQueueSubmit(device.GetGraphicsQueue(),1,&submitInfo,inFlightFences[currentFrame]) != VK_SUCCESS)
     {
-        width, height, 1
-    };
-
-    vkCmdCopyBufferToImage(commandBuffer,
-        buffer,
-        image,
-        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-        1,
-        &region);
-
-    device.GetCommandPool().EndSingleTimeCommands(commandBuffer);
-}
-
-void MEPipeline::CreateTextureSampler()
-{
-    VkSamplerCreateInfo samplerInfo{};
-    samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-    samplerInfo.magFilter = VK_FILTER_LINEAR;
-    samplerInfo.minFilter = VK_FILTER_LINEAR;
-    samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-    samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-    samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-    samplerInfo.anisotropyEnable = VK_TRUE;
-
-    VkPhysicalDeviceProperties properties{};
-    vkGetPhysicalDeviceProperties(device.GetPhysicalDevice(),&properties);
-
-    samplerInfo.maxAnisotropy = properties.limits.maxSamplerAnisotropy;
-    samplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
-    samplerInfo.unnormalizedCoordinates = VK_FALSE;
-    samplerInfo.compareEnable = VK_FALSE;
-    samplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
-    samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
-    samplerInfo.mipLodBias = 0.0f;
-    samplerInfo.minLod = 0.0f;
-    samplerInfo.maxLod = static_cast<float>(mipLevels);
-
-    if(vkCreateSampler(device.GetDevice(),&samplerInfo,nullptr,&textureSampler) != VK_SUCCESS)
-    {
-        throw std::runtime_error("failed to create texture sampler");
-    }
-}
-
-
-void MEPipeline::CreateTextureImageView()
-{
-    textureImageView = device.CreateImageView(textureImage,VK_FORMAT_R8G8B8A8_SRGB,VK_IMAGE_ASPECT_COLOR_BIT,mipLevels);
-}
-
-void MEPipeline::CreateTextureImage()
-{
-    int texWidth, texHeight, texChannels;
-
-    stbi_uc* pixels = stbi_load(TEXTURE_PATH.c_str(),&texWidth,&texHeight,&texChannels,STBI_rgb_alpha);
-    VkDeviceSize imageSize = texWidth * texHeight * 4;
-
-    mipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(texWidth,texHeight)))) + 1;
-
-    if(!pixels)
-    {
-        throw std::runtime_error("failed to load texture image");
+        throw std::runtime_error("failed to submit draw command buffer");
     }
 
-    VkBuffer stagingBuffer;
-    VkDeviceMemory stagingBufferMemory;
+    VkPresentInfoKHR presentInfo{};
+    presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+    presentInfo.waitSemaphoreCount = 1;
+    presentInfo.pWaitSemaphores = signalSemaphores;
 
-    device.CreateBuffer(imageSize,VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | 
-                            VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,stagingBuffer, stagingBufferMemory);
+    VkSwapchainKHR swapChains[] = {swapchain.GetSwapchain()};
+    presentInfo.swapchainCount = 1;
+    presentInfo.pSwapchains = swapChains;
+    presentInfo.pImageIndices = &imageIndex;
+    presentInfo.pResults = nullptr;
 
-    void* data;
-    vkMapMemory(device.GetDevice(),stagingBufferMemory,0,imageSize,0,&data);
-    memcpy(data,pixels,static_cast<size_t>(imageSize));
-    vkUnmapMemory(device.GetDevice(),stagingBufferMemory);
+    auto result = vkQueuePresentKHR(device.GetPresentQueue(),&presentInfo);
 
-    stbi_image_free(pixels);
+    if(result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || window.framebufferResized)
+    {
+        window.framebufferResized = false;
+        RecreateSwapChain();
+    }
+    else if(result != VK_SUCCESS)
+    {
+        throw std::runtime_error("failed to present swap chain image");
+    }
 
-    device.CreateImage(texWidth, texHeight, mipLevels, VK_SAMPLE_COUNT_1_BIT, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL, 
-                VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, 
-                VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, textureImage,textureImageMemory);
+    currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
+}
 
-    device.TransitionImageLayout(textureImage,VK_FORMAT_R8G8B8A8_SRGB,VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,mipLevels);
-    CopyBufferToImage(stagingBuffer,textureImage,static_cast<uint32_t>(texWidth),static_cast<uint32_t>(texHeight));
+VkCommandBuffer& MEPipeline::BindPipeline(int imageIndex)
+{
+    VkCommandBufferBeginInfo beginInfo{};
+    beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 
-    //TransitionImageLayout(textureImage,VK_FORMAT_R8G8B8A8_SRGB,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,mipLevels);
+    auto cb = commandBuffer->GetCommandBuffer(imageIndex);
 
-    GenerateMipmaps(textureImage,VK_FORMAT_R8G8B8A8_SRGB,texWidth,texHeight,mipLevels);
+    if(vkBeginCommandBuffer(cb,&beginInfo) != VK_SUCCESS)
+    {
+        throw std::runtime_error("failed to begin recording command buffer");
+    }
 
-    vkDestroyBuffer(device.GetDevice(),stagingBuffer,nullptr);
-    vkFreeMemory(device.GetDevice(),stagingBufferMemory,nullptr);
+    swapchain.BindSwapchain(cb,imageIndex);
+    vkCmdBindPipeline(cb,VK_PIPELINE_BIND_POINT_GRAPHICS,graphicsPipeline);
+
+    return commandBuffer->GetCommandBuffer(imageIndex);
+}
+
+void MEPipeline::EndPipeline(VkCommandBuffer& commandBuffer)
+{
+    swapchain.EndSwapchain(commandBuffer);
+
+    if(vkEndCommandBuffer(commandBuffer) != VK_SUCCESS)
+    {
+        throw std::runtime_error("failed to record command buffer");
+    }
 }
 
 void MEPipeline::CreateDescriptorSets()
@@ -513,8 +319,8 @@ void MEPipeline::CreateDescriptorSets()
 
         VkDescriptorImageInfo imageInfo{};
         imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        imageInfo.imageView = textureImageView;
-        imageInfo.sampler = textureSampler;
+        imageInfo.imageView = texture->GetImageView();
+        imageInfo.sampler = texture->GetSampler();
 
         std::array<VkWriteDescriptorSet,2> descriptorWrites{};
 

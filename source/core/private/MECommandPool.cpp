@@ -1,5 +1,5 @@
-#include "MECommandPool.hpp"
-#include <Device/MEDevice.hpp>
+#include "../public/MECommandPool.hpp"
+#include "../public/MEDevice.hpp"
 #include <stdexcept>
 
 

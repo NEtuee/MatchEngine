@@ -1,4 +1,4 @@
-#include "MEWindow.hpp"
+#include "../public/MEWindow.hpp"
 
 namespace MatchEngine
 {

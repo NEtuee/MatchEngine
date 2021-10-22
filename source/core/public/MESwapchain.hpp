@@ -4,9 +4,9 @@
 #include <optional>
 #include <memory>
 
-#include "Device/MEDevice.hpp"
-#include "Window/MEWindow.hpp"
-#include "CommandBuffer/MECommandBuffer.hpp"
+#include "MEDevice.hpp"
+#include "MEWindow.hpp"
+#include "MECommandBuffer.hpp"
 
 namespace MatchEngine
 {
@@ -19,6 +19,9 @@ public:
 
     void RecreateSwapChain();
     void CleanupSwapChain();
+
+    void BindSwapchain(VkCommandBuffer& commandBuffer,int imageIndex);
+    void EndSwapchain(VkCommandBuffer& commandBuffer);
 
     inline size_t GetSwapchainImagesSize() {return swapChainImages.size();}
     inline size_t GetSwapchainFrameBufferSize() {return swapChainFrameBuffer.size();}

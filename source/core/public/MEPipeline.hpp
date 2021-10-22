@@ -2,11 +2,12 @@
 
 #include <string>
 #include <vector>
-#include <Device/MEDevice.hpp>
-#include <Window/MEWindow.hpp>
+#include "MEDevice.hpp"
+#include "MEWindow.hpp"
 
-#include "Vertex.hpp"
-#include "Swapchain/MESwapchain.hpp"
+#include "../Vertex.hpp"
+#include "MESwapchain.hpp"
+#include "METexture.hpp"
 
 
 namespace MatchEngine
@@ -23,22 +24,22 @@ public:
     void UpdateUniformBuffer(uint32_t currentImage,float plus);
     void RecreateSwapChain();
     void CleanupSwapChain();
+
+    void RecordCommandBuffer(int imageIndex);
+
+    uint32_t BeginRender();
+    void EndRender(uint32_t imageIndex);
+
+    VkCommandBuffer& BindPipeline(int imageIndex);
+    void EndPipeline(VkCommandBuffer& commandBuffer);
 private:
     static std::vector<char> ReadFile(const std::string & path);
-
-
-    void GenerateMipmaps(VkImage image, VkFormat imageFormat, int32_t texWidth, int32_t texHeight, uint32_t mipLevels);
-    void CopyBufferToImage(VkBuffer buffer,VkImage image, uint32_t width, uint32_t height);
-    void CreateTextureImage();
 
     void CreateDescriptorSets();
     void CreateDescriptorPool();
     void CreateDescriptorSetLayout();
 
-    void CreateTextureSampler();
-    void CreateTextureImageView();
     void CopyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size);
-
 
     void LoadModel();
 
@@ -50,10 +51,7 @@ private:
     VkShaderModule CreateShaderModule(const std::vector<char>& code);
 
     uint32_t mipLevels;
-    VkImageView textureImageView;
-    VkSampler textureSampler;
-    VkImage textureImage;
-    VkDeviceMemory textureImageMemory;
+    
 
     VkDescriptorPool descriptorPool;
     std::vector<VkDescriptorSet> descriptorSets;
@@ -88,10 +86,10 @@ private:
     MEWindow& window;
     MESwapchain& swapchain;
 
+    METexture* texture;
 
     MECommandBuffer* commandBuffer;
     void CraeteCommandBuffers();
-    void RecordCommandBuffer(int imageIndex);
 };
 
 }

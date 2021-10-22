@@ -1,6 +1,6 @@
 #define _DEBUG
 
-#include <App/MEApp.hpp>
+#include "source/core/public/MEApp.hpp"
 
 #include <cstdlib>
 #include <iostream>

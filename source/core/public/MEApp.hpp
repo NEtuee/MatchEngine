@@ -1,9 +1,9 @@
 #pragma once
 
-#include <Window/MEWindow.hpp>
-#include <Device/MEDevice.hpp>
-#include <Pipeline/MEPipeline.hpp>
-#include <Swapchain/MESwapchain.hpp>
+#include "MEWindow.hpp"
+#include "MEDevice.hpp"
+#include "MEPipeline.hpp"
+#include "MESwapchain.hpp"
 
 namespace MatchEngine
 {
@@ -15,6 +15,7 @@ public:
     static constexpr int HEIGHT = 720;
 
     void Run();
+    void DrawFrame();
 private:
     MEWindow meWindow{WIDTH,HEIGHT,"MyWindow"};
     MEDevice meDevice{meWindow};

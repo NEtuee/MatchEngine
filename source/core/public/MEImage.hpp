@@ -14,7 +14,7 @@ class MEImage
 
 public:
     MEImage(MEDevice* device);
-    ~MEImage();
+    virtual ~MEImage();
 
     void CreateImage(uint32_t width, uint32_t height, uint32_t mipLevels, VkSampleCountFlagBits numSample, VkFormat format, VkImageTiling tiling, 
                 VkImageUsageFlags usage, VkMemoryPropertyFlags properties,VkImageAspectFlags aspectFlags);
@@ -22,7 +22,7 @@ public:
 
     const VkImage& GetImage() {return image;}
     const VkImageView& GetImageView() {return imageView;}
-private:
+protected:
     VkImage image;
     VkDeviceMemory imageMemory;
     VkImageView imageView;

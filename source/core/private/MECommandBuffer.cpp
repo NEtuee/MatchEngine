@@ -1,4 +1,4 @@
-#include "MECommandBuffer.hpp"
+#include "../public/MECommandBuffer.hpp"
 #include <stdexcept>
 
 namespace MatchEngine

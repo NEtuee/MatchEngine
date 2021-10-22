@@ -1,5 +1,5 @@
-#include <Device/MEDevice.hpp>
-#include "MEImage.hpp"
+#include "../public/MEDevice.hpp"
+#include "../public/MEImage.hpp"
 
 namespace MatchEngine
 {
